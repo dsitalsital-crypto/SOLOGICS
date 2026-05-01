@@ -1,0 +1,193 @@
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Bebas+Neue&family=Space+Grotesk:wght@500;600;700&display=swap');
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  .app { font-family: 'DM Sans', sans-serif; background: #0D1117; color: #E6EDF3; min-height: 600px; display: flex; flex-direction: column; border-radius: 4px; overflow: hidden; }
+  .topbar { background: #111; border-bottom: 2px solid #f01e2c; padding: 0 24px; display: flex; align-items: center; justify-content: space-between; height: 58px; flex-shrink: 0; }
+
+  .logo { display: flex; align-items: center; font-family: 'Bebas Neue', sans-serif; font-size: 28px; letter-spacing: 1px; line-height: 1; }
+  .logo-so { color: #E6EDF3; padding: 4px 8px; background: #222; }
+  .logo-logics { color: #fff; background: #f01e2c; padding: 4px 10px; }
+
+  .topbar-right { display: flex; align-items: center; gap: 12px; }
+  .avatar { width: 32px; height: 32px; background: #222; border-radius: 2px; border: 1px solid #333; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; color: #aaa; }
+  .notif { width: 32px; height: 32px; background: #111; border: 1px solid #333; border-radius: 2px; display: flex; align-items: center; justify-content: center; position: relative; cursor: pointer; }
+  .notif-dot { position: absolute; top: 6px; right: 6px; width: 7px; height: 7px; background: #f01e2c; border-radius: 50%; border: 1.5px solid #111; }
+  .body { display: flex; flex: 1; overflow: hidden; }
+  .sidebar { width: 200px; background: #161B22; border-right: 1px solid #21262D; padding: 16px 12px; display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 2px; font-size: 13px; color: #8B949E; cursor: pointer; transition: all 0.15s; }
+  .nav-item:hover { background: #21262D; color: #E6EDF3; }
+  .nav-item.active { background: #2a0408; color: #f01e2c; border-left: 2px solid #f01e2c; }
+  .nav-icon { width: 16px; height: 16px; opacity: 0.7; flex-shrink: 0; }
+  .nav-item.active .nav-icon { opacity: 1; }
+  .nav-badge { margin-left: auto; background: #f01e2c; color: #fff; font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 2px; }
+  .nav-section { font-size: 10px; font-weight: 600; color: #484F58; letter-spacing: 0.08em; text-transform: uppercase; padding: 12px 10px 4px; }
+  .main { flex: 1; overflow-y: auto; padding: 24px; display: flex; flex-direction: column; gap: 20px; }
+  .page-header { display: flex; align-items: flex-start; justify-content: space-between; }
+  .page-title { font-family: 'Space Grotesk', sans-serif; font-size: 20px; font-weight: 700; color: #E6EDF3; }
+  .page-sub { font-size: 13px; color: #8B949E; margin-top: 2px; }
+  .btn { background: #f01e2c; color: #fff; border: none; border-radius: 2px; padding: 8px 16px; font-size: 13px; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .stat { background: #161B22; border: 1px solid #21262D; border-radius: 2px; padding: 16px; border-top: 2px solid #f01e2c; }
+  .stat-label { font-size: 11px; color: #8B949E; font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em; }
+  .stat-value { font-family: 'Space Grotesk', sans-serif; font-size: 26px; font-weight: 700; color: #E6EDF3; margin-top: 6px; }
+  .stat-delta { font-size: 12px; margin-top: 4px; }
+  .stat-delta.up { color: #3FB950; }
+  .stat-delta.down { color: #f01e2c; }
+  .stat-delta.neu { color: #8B949E; }
+  .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .section-title { font-size: 14px; font-weight: 600; color: #E6EDF3; }
+  .link { font-size: 12px; color: #f01e2c; cursor: pointer; }
+  .table-wrap { background: #161B22; border: 1px solid #21262D; border-radius: 2px; overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead { background: #0D1117; }
+  th { text-align: left; padding: 10px 16px; font-size: 11px; font-weight: 600; color: #8B949E; text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid #21262D; }
+  td { padding: 12px 16px; border-bottom: 1px solid #1c2128; color: #C9D1D9; vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #1C2128; }
+  .order-id { font-family: 'Space Grotesk', sans-serif; font-weight: 600; color: #f01e2c; font-size: 13px; }
+  .badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 2px; font-size: 11px; font-weight: 600; }
+  .badge-dot { width: 6px; height: 6px; border-radius: 50%; }
+  .badge.transit { background: #1A3A5C; color: #58A6FF; }
+  .badge.transit .badge-dot { background: #58A6FF; }
+  .badge.delivered { background: #112D24; color: #3FB950; }
+  .badge.delivered .badge-dot { background: #3FB950; }
+  .badge.pending { background: #2D1D00; color: #D29922; }
+  .badge.pending .badge-dot { background: #D29922; }
+  .badge.alert { background: #2a0408; color: #f01e2c; }
+  .badge.alert .badge-dot { background: #f01e2c; }
+  .bottom-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .card { background: #161B22; border: 1px solid #21262D; border-radius: 2px; padding: 16px; }
+  .client-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #21262D; font-size: 13px; }
+  .client-row:last-child { border-bottom: none; }
+  .client-info { display: flex; align-items: center; gap: 10px; }
+  .client-avatar { width: 30px; height: 30px; border-radius: 2px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; }
+  .ca-blue { background: #1A3A5C; color: #58A6FF; }
+  .ca-green { background: #112D24; color: #3FB950; }
+  .ca-amber { background: #2D1D00; color: #D29922; }
+  .ca-purple { background: #2A1F5A; color: #BC8CFF; }
+  .client-name { font-weight: 500; color: #E6EDF3; }
+  .client-orders { font-size: 11px; color: #8B949E; }
+  .chart-bars { display: flex; align-items: flex-end; gap: 6px; height: 80px; margin-top: 12px; }
+  .bar-wrap { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .bar { width: 100%; background: #2a0408; border-radius: 1px; transition: background 0.2s; }
+  .bar:hover { background: #f01e2c; }
+  .bar.highlight { background: #f01e2c; }
+  .bar-label { font-size: 10px; color: #484F58; }
+  .tabs { display: flex; gap: 2px; background: #0D1117; padding: 3px; border-radius: 2px; margin-bottom: 12px; }
+  .tab { padding: 5px 12px; border-radius: 2px; font-size: 12px; color: #8B949E; cursor: pointer; }
+  .tab.active { background: #161B22; color: #f01e2c; font-weight: 500; }
+</style>
+
+<div class="app">
+  <div class="topbar">
+    <div class="logo">
+      <span class="logo-so">SO</span>
+      <span class="logo-logics">LOGICS</span>
+    </div>
+    <div class="topbar-right">
+      <div class="notif">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="#8B949E"><path d="M8 16a2 2 0 001.985-1.75c.017-.137-.097-.25-.235-.25h-3.5c-.138 0-.252.113-.235.25A2 2 0 008 16zm.847-13.025A5.5 5.5 0 002.5 8.5v2.5H1v1.5h14V11h-1.5V8.5a5.5 5.5 0 00-4.653-5.525z"/></svg>
+        <div class="notif-dot"></div>
+      </div>
+      <div class="avatar">MT</div>
+    </div>
+  </div>
+
+  <div class="body">
+    <div class="sidebar">
+      <div class="nav-section">Menu</div>
+      <div class="nav-item active">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M1 2.75A.75.75 0 011.75 2h12.5a.75.75 0 010 1.5H1.75A.75.75 0 011 2.75zm0 5A.75.75 0 011.75 7h12.5a.75.75 0 010 1.5H1.75A.75.75 0 011 7.75zM1.75 12a.75.75 0 000 1.5h12.5a.75.75 0 000-1.5H1.75z"/></svg>
+        Dashboard
+      </div>
+      <div class="nav-item">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M1.5 1.75V13L8 9.5l6.5 3.5V1.75a.25.25 0 00-.25-.25h-12.5a.25.25 0 00-.25.25z"/></svg>
+        Orders
+        <span class="nav-badge">12</span>
+      </div>
+      <div class="nav-item">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M10.5 5a.5.5 0 01.5.5v3a.5.5 0 01-.5.5H7a.5.5 0 010-1h3V5.5a.5.5 0 01.5-.5zM8 1a7 7 0 100 14A7 7 0 008 1zM0 8a8 8 0 1116 0A8 8 0 010 8z"/></svg>
+        Planning
+      </div>
+      <div class="nav-item">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M5.5 3.5a2 2 0 100 4 2 2 0 000-4zM1 5.5a4.5 4.5 0 119 0 4.5 4.5 0 01-9 0zM11 4h1a1 1 0 011 1v.5a.5.5 0 001 0V5a2 2 0 00-2-2h-1a.5.5 0 000 1zM1.5 12.5a3 3 0 015.829-1H11a2 2 0 012 2v.5a.5.5 0 01-1 0v-.5a1 1 0 00-1-1H7.329A3.001 3.001 0 011.5 12.5zm7.5 1.5a.5.5 0 000 1h4a.5.5 0 000-1H9z"/></svg>
+        Klanten
+      </div>
+      <div class="nav-section">Analyse</div>
+      <div class="nav-item">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M1.5 1.5v13h13V1.5H1.5zM0 1a1 1 0 011-1h14a1 1 0 011 1v14a1 1 0 01-1 1H1a1 1 0 01-1-1V1zm4.5 10.5v-4h1.5v4H4.5zm3-7.5V11.5H9V4H7.5zm3 4v3.5H12V8h-1.5z"/></svg>
+        Rapportages
+      </div>
+      <div class="nav-item" style="margin-top: auto;">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M7.78 12.58L2.22 7l5.56-5.58L9.1 2.78 4.88 7l4.22 4.22-1.32 1.36zm1.44 0L13.78 7 9.22 1.42 7.9 2.78 12.12 7 7.9 11.22l1.32 1.36z"/></svg>
+        Instellingen
+      </div>
+    </div>
+
+    <div class="main">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Dashboard</div>
+          <div class="page-sub">Vrijdag 1 mei 2026 — Goedemorgen!</div>
+        </div>
+        <button class="btn">+ Nieuwe order</button>
+      </div>
+
+      <div class="stats">
+        <div class="stat">
+          <div class="stat-label">Actieve orders</div>
+          <div class="stat-value">48</div>
+          <div class="stat-delta up">↑ 8 vs vorige week</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Onderweg</div>
+          <div class="stat-value">23</div>
+          <div class="stat-delta neu">— Geen wijziging</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Afgeleverd vandaag</div>
+          <div class="stat-value">11</div>
+          <div class="stat-delta up">↑ 3 extra</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Aandacht nodig</div>
+          <div class="stat-value" style="color:#f01e2c;">3</div>
+          <div class="stat-delta down">↓ 2 opgelost</div>
+        </div>
+      </div>
+
+      <div>
+        <div class="section-header">
+          <div class="section-title">Recente orders</div>
+          <div class="link">Alle orders →</div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Order</th>
+                <th>Klant</th>
+                <th>Bestemming</th>
+                <th>Datum</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="order-id">#SL-4821</span></td>
+                <td>Bakker & Zn BV</td>
+                <td>Rotterdam</td>
+                <td>01 mei</td>
+                <td><span class="badge transit"><span class="badge-dot"></span>Onderweg</span></td>
+              </tr>
+              <tr>
+                <td><span class="order-id">#SL-4820</span></td>
+                <td>Van Dijk Retail</td>
+                <td>Amsterdam</td>
+                <td>01 mei</td>
+                <td><span class="badge delivered"><span class="badge-dot"></span>Afgeleverd</span></td>
+              </tr>
+              <tr>
+                <td><span class="order-id">#SL-4819</span></td>
+     
