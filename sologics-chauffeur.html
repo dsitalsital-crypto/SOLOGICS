@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="SOlogics"/>
+<title>SOlogics — Chauffeur</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Bebas+Neue&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{background:#0D1117;font-family:'DM Sans',sans-serif;color:#E6EDF3;-webkit-font-smoothing:antialiased}
+input,select,textarea{font-family:'DM Sans',sans-serif;color:#E6EDF3;-webkit-appearance:none;font-size:16px}
+input::placeholder{color:#484F58}
+button{-webkit-tap-highlight-color:transparent;cursor:pointer}
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+.fade-up{animation:fadeUp .3s ease forwards}
+::-webkit-scrollbar{display:none}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+
+const SUPA_URL="https://bvnyzxusfiloaivvhlnn.supabase.co";
+const SUPA_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ2bnl6eHVzZmlsb2FpdnZobG5uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2NjAzMjcsImV4cCI6MjA5MzIzNjMyN30.uT4KjSUxK9rwINGRktVcUgu3vdwvuoQ3lEFfccfJTQY";
+const H={"Content-Type":"application/json",apikey:SUPA_KEY,Authorization:`Bearer ${SUPA_KEY}`};
+
+async function db(path,o={}){
+  const r=await fetch(SUPA_URL+"/rest/v1"+path,{headers:{...H,...(o.headers||{})},...o});
+  if(!r.ok)throw new Error(await r.text());
+  if(r.status===204)return null;
+  return r.json();
+}
+
+const STATUS_FLOW={
+  toegewezen:   {next:"geaccepteerd",   nextLabel:"Accepteer rit",      color:"#BC8CFF",bg:"#2A1F5A"},
+  geaccepteerd: {next:"naar_ophaling",  nextLabel:"Start naar ophaling", color:"#58A6FF",bg:"#1A3A5C"},
+  naar_ophaling:{next:"opgehaald",      nextLabel:"Pakket opgehaald",    color:"#D29922",bg:"#2D1D00"},
+  opgehaald:    {next:"onderweg",       nextLabel:"Start bezorging",     color:"#F0883E",bg:"#2D1800"},
+  onderweg:     {next:"aangekomen",     nextLabel:"Aangekomen",          color:"#58A6FF",bg:"#1A3A5C"},
+  aangekomen:   {next:"afgeleverd",     nextLabel:"Afgeleverd ✓",        color:"#3FB950",bg:"#112D24"},
+  aangemaakt:   {next:"geaccepteerd",   nextLabel:"Accepteer",           color:"#8B949E",bg:"#21262D"},
+};
+
+const STATUS_LABEL={
+  aangemaakt:"Aangemaakt",toegewezen:"Toegewezen",geaccepteerd:"Geaccepteerd",
+  naar_ophaling:"Naar ophaling",opgehaald:"Opgehaald",onderweg:"Onderweg",
+  aangekomen:"Aangekomen",afgeleverd:"Afgeleverd",mislukt:"Mislukt",
+  retour:"Retour",voltooid:"Voltooid",
+};
+
+const STATUS_COLOR={
+  aangemaakt:"#8B949E",toegewezen:"#BC8CFF",geaccepteerd:"#58A6FF",
+  naar_ophaling:"#D29922",opgehaald:"#F0883E",onderweg:"#58A6FF",
+  aangekomen:"#79B8FF",afgeleverd:"#3FB950",mislukt:"#f01e2c",
+  retour:"#D29922",voltooid:"#3FB950",
+};
+
+// ── LOGIN ─────────────────────────────────────────────────────────────────────
+function Login({onLogin}){
+  const [chauffeurs,setChauffeurs]=React.useState([]);
+  const [sel,setSel]=React.useState("");
+  const [loading,setLoading]=React.useState(true);
+  const [err,setErr]=React.useState("");
+
+  React.useEffect(()=>{
+    db("/chauffeurs?select=*&actief=eq.true&order=naam.asc").then(r=>{setChauffeurs(r||[]);setLoading(false);}).catch(()=>setLoading(false));
+  },[]);
+
+  function login(){
+    if(!sel){setErr("Selecteer jouw naam");return;}
+    const c=chauffeurs.find(c=>c.id===sel);
+    if(c){localStorage.setItem("sl_chauffeur",JSON.stringify(c));onLogin(c);}
+  }
+
+  return <div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24,background:"#0D1117"}}>
+    <div style={{display:"flex",alignItems:"center",fontFamily:"'Bebas Neue',sans-serif",fontSize:32,letterSpacing:1,lineHeight:1,marginBottom:8}}>
+      <span style={{color:"#E6EDF3",background:"#222",padding:"3px 8px"}}>SO</span>
+      <span style={{color:"#fff",background:"#f01e2c",padding:"3px 10px"}}>LOGICS</span>
+    </div>
+    <div style={{fontSize:13,color:"#8B949E",marginBottom:36}}>Chauffeur App</div>
+
+    <div style={{width:"100%",maxWidth:340,display:"flex",flexDirection:"column",gap:14}}>
+      <div style={{background:"#161B22",border:"1px solid #21262D",borderRadius:4,padding:20}}>
+        <div style={{fontSize:12,color:"#8B949E",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Wie ben jij?</div>
+        {loading?<div style={{color:"#8B949E",fontSize:13,textAlign:"center",padding:12}}>Laden...</div>:
+        chauffeurs.length===0?<div style={{color:"#f01e2c",fontSize:13}}>Geen chauffeurs gevonden. Vraag de admin om jou toe te voegen.</div>:
+        <select style={{width:"100%",background:"#0D1117",border:"1px solid #30363D",borderRadius:2,color:sel?"#E6EDF3":"#484F58",padding:"12px 10px",fontSize:15,outline:"none"}} value={sel} onChange={e=>setSel(e.target.value)}>
+          <option value="">Selecteer jouw naam...</option>
+          {chauffeurs.map(c=><option key={c.id} value={c.id}>{c.naam}</option>)}
+        </select>}
+        {err&&<div style={{color:"#f01e2c",fontSize:12,marginTop:8}}>{err}</div>}
+      </div>
+      <button onClick={login} style={{background:"#f01e2c",color:"#fff",border:"none",borderRadius:4,padding:"15px",fontSize:15,fontWeight:700,width:"100%",fontFamily:"'DM Sans',sans-serif"}}>
+        Inloggen →
+      </button>
+    </div>
+  </div>
+}
+
+// ── RIT KAART ─────────────────────────────────────────────────────────────────
+function RitKaart({z,onTap,compact}){
+  const flow=STATUS_FLOW[z.status];
+  const sc=STATUS_COLOR[z.status]||"#8B949E";
+
+  return <div onClick={()=>onTap(z)} className="fade-up" style={{background:"#161B22",border:`1px solid #21262D`,borderLeft:`3px solid ${sc}`,borderRadius:4,padding:compact?"12px 14px":"16px",marginBottom:10,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+    <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8}}>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+          <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:16,color:"#f01e2c"}}>{z.zending_code}</span>
+          {z.diensttype==="express"&&<span style={{background:"#2D1D00",color:"#D29922",fontSize:9,fontWeight:700,padding:"2px 5px",borderRadius:2}}>EXPRESS</span>}
+          {z.diensttype==="same_day"&&<span style={{background:"#2a0408",color:"#f01e2c",fontSize:9,fontWeight:700,padding:"2px 5px",borderRadius:2}}>SAME DAY</span>}
+          {z.cod_bedrag>0&&<span style={{background:"#2D1D00",color:"#D29922",fontSize:9,fontWeight:700,padding:"2px 5px",borderRadius:2}}>COD</span>}
+        </div>
+        <div style={{fontSize:14,fontWeight:600,color:"#E6EDF3",marginBottom:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{z.ontvanger_naam||"Onbekend"}</div>
+        <div style={{fontSize:12,color:"#8B949E",marginBottom:compact?0:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>📍 {z.afleveradres}</div>
+        {!compact&&<div style={{fontSize:11,color:"#484F58"}}>{z.district} · {z.ontvanger_tel||"Geen tel."}</div>}
+      </div>
+      <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6,flexShrink:0}}>
+        <span style={{fontSize:10,fontWeight:700,padding:"3px 8px",borderRadius:2,background:STATUS_FLOW[z.status]?.bg||"#21262D",color:sc}}>{STATUS_LABEL[z.status]||z.status}</span>
+        {z.cod_bedrag>0&&!compact&&<span style={{fontSize:11,color:"#D29922",fontWeight:600}}>SRD {z.cod_bedrag}</span>}
+      </div>
+    </div>
+    {!compact&&flow&&<div style={{marginTop:10,paddingTop:10,borderTop:"1px solid #21262D"}}>
+      <div style={{fontSize:11,color:"#8B949E"}}>Volgende actie →</div>
+      <div style={{fontSize:13,fontWeight:600,color:flow.color,marginTop:2}}>{flow.nextLabel}</div>
+    </div>}
+  </div>
+}
+
+// ── DETAIL ────────────────────────────────────────────────────────────────────
+function RitDetail({z,onClose,onRefresh,chauffeur}){
+  const [loading,setLoading]=React.useState(false);
+  const [showMislukt,setShowMislukt]=React.useState(false);
+  const [reden,setReden]=React.useState("");
+  const [showCOD,setShowCOD]=React.useState(false);
+  const [codBedrag,setCodBedrag]=React.useState(z.cod_bedrag||"");
+
+  const flow=STATUS_FLOW[z.status];
+
+  async function nextStatus(){
+    if(!flow)return;
+    setLoading(true);
+    // Get GPS if available
+    let lat=null,lng=null;
+    try{
+      const pos=await new Promise((res,rej)=>navigator.geolocation.getCurrentPosition(res,rej,{timeout:5000}));
+      lat=pos.coords.latitude;lng=pos.coords.longitude;
+    }catch(e){}
+
+    await db(`/zendingen?id=eq.${z.id}`,{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({status:flow.next})});
+    await db("/status_logs",{method:"POST",headers:{Prefer:"return=minimal"},body:JSON.stringify({zending_id:z.id,status:flow.next,lat,lng})});
+
+    // If afgeleverd and COD, show COD confirmation
+    if(flow.next==="afgeleverd"&&z.cod_bedrag>0){
+      setLoading(false);setShowCOD(true);return;
+    }
+    setLoading(false);onRefresh();onClose();
+  }
+
+  async function markMislukt(){
+    setLoading(true);
+    await db(`/zendingen?id=eq.${z.id}`,{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({status:"mislukt"})});
+    await db("/status_logs",{method:"POST",headers:{Prefer:"return=minimal"},body:JSON.stringify({zending_id:z.id,status:"mislukt",notitie:reden})});
+    setLoading(false);onRefresh();onClose();
+  }
+
+  async function confirmCOD(){
+    await db(`/zendingen?id=eq.${z.id}`,{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({cod_ontvangen:true})});
+    await db("/cod_transacties",{method:"POST",headers:{Prefer:"return=minimal"},body:JSON.stringify({zending_id:z.id,chauffeur_id:chauffeur.id,bedrag:parseFloat(codBedrag)||z.cod_bedrag,ontvangen:true})});
+    setShowCOD(false);onRefresh();onClose();
+  }
+
+  const openMaps=()=>{
+    const q=encodeURIComponent(z.afleveradres+(z.district?`, ${z.district}, Suriname`:", Suriname"));
+    window.open(`https://www.google.com/maps/search/?api=1&query=${q}`,"_blank");
+  };
+
+  const callOntvanger=()=>{if(z.ontvanger_tel)window.open(`tel:${z.ontvanger_tel}`);};
+  const waOntvanger=()=>{if(z.ontvanger_tel)window.open(`https://wa.me/${z.ontvanger_tel.replace(/\D/g,"")}`)};
+
+  // COD modal
+  if(showCOD)return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.9)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200,padding:20}}>
+    <div style={{background:"#161B22",border:"1px solid #3FB950",borderRadius:4,padding:24,width:"100%",maxWidth:340,textAlign:"center"}}>
+      <div style={{fontSize:40,marginBottom:12}}>💰</div>
+      <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:22,marginBottom:6}}>COD Ontvangen?</div>
+      <div style={{fontSize:13,color:"#8B949E",marginBottom:16}}>Bevestig het ontvangen bedrag van de klant</div>
+      <div style={{fontSize:12,color:"#8B949E",textAlign:"left",marginBottom:6,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.07em"}}>Bedrag (SRD)</div>
+      <input style={{background:"#0D1117",border:"2px solid #3FB950",borderRadius:2,color:"#E6EDF3",padding:"12px",fontSize:20,width:"100%",outline:"none",textAlign:"center",marginBottom:16}} type="number" value={codBedrag} onChange={e=>setCodBedrag(e.target.value)}/>
+      <button onClick={confirmCOD} style={{background:"#3FB950",color:"#fff",border:"none",borderRadius:4,padding:"14px",fontSize:15,fontWeight:700,width:"100%",fontFamily:"'DM Sans',sans-serif",marginBottom:8}}>
+        ✓ Bevestigen — SRD {codBedrag||z.cod_bedrag}
+      </button>
+      <button onClick={()=>{setShowCOD(false);onRefresh();onClose();}} style={{background:"transparent",color:"#8B949E",border:"1px solid #30363D",borderRadius:4,padding:"10px",fontSize:13,width:"100%",fontFamily:"'DM Sans',sans-serif"}}>
+        Overslaan
+      </button>
+    </div>
+  </div>
+
+  // Mislukt modal
+  if(showMislukt)return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.9)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:200}}>
+    <div style={{background:"#161B22",border:"1px solid #f01e2c",borderRadius:"4px 4px 0 0",padding:20,width:"100%",maxWidth:440}}>
+      <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:20,color:"#f01e2c",marginBottom:12}}>Levering Mislukt</div>
+      <div style={{fontSize:12,color:"#8B949E",marginBottom:6,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.07em"}}>Reden</div>
+      <textarea style={{background:"#0D1117",border:"1px solid #30363D",borderRadius:2,color:"#E6EDF3",padding:"10px",fontSize:14,width:"100%",outline:"none",height:80,resize:"none",marginBottom:14}} placeholder="Niemand thuis, adres niet gevonden..." value={reden} onChange={e=>setReden(e.target.value)}/>
+      <div style={{display:"flex",gap:8}}>
+        <button onClick={()=>setShowMislukt(false)} style={{flex:1,background:"transparent",color:"#8B949E",border:"1px solid #30363D",borderRadius:4,padding:"12px",fontSize:14,fontFamily:"'DM Sans',sans-serif"}}>Terug</button>
+        <button onClick={markMislukt} disabled={loading} style={{flex:2,background:"#f01e2c",color:"#fff",border:"none",borderRadius:4,padding:"12px",fontSize:14,fontWeight:700,fontFamily:"'DM Sans',sans-serif"}}>
+          {loading?"...":"Bevestig mislukt"}
+        </button>
+      </div>
+    </div>
+  </div>
+
+  return <div style={{position:"fixed",inset:0,background:"#0D1117",zIndex:100,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+    {/* Header */}
+    <div style={{background:"#111",borderBottom:"2px solid #f01e2c",padding:"12px 16px",display:"flex",alignItems:"center",gap:12,flexShrink:0}}>
+      <button onClick={onClose} style={{background:"#21262D",border:"none",color:"#E6EDF3",width:36,height:36,borderRadius:2,fontSize:18,display:"flex",alignItems:"center",justifyContent:"center"}}>←</button>
+      <div style={{flex:1}}>
+        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:18,color:"#f01e2c",letterSpacing:.5}}>{z.zending_code}</div>
+        <div style={{fontSize:11,color:"#8B949E"}}>{z.diensttype?.replace("_"," ")} · {z.district}</div>
+      </div>
+      <span style={{fontSize:11,fontWeight:700,padding:"4px 8px",borderRadius:2,background:STATUS_FLOW[z.status]?.bg||"#21262D",color:STATUS_COLOR[z.status]||"#8B949E"}}>{STATUS_LABEL[z.status]}</span>
+    </div>
+
+    {/* Content */}
+    <div style={{flex:1,overflowY:"auto",padding:16}}>
+
+      {/* Ontvanger */}
+      <div style={{background:"#161B22",border:"1px solid #21262D",borderRadius:4,padding:16,marginBottom:12}}>
+        <div style={{fontSize:10,color:"#8B949E",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Ontvanger</div>
+        <div style={{fontSize:18,fontWeight:700,marginBottom:4}}>{z.ontvanger_naam||"—"}</div>
+        <div style={{fontSize:14,color:"#C9D1D9",marginBottom:12}}>📍 {z.afleveradres}</div>
+        {z.ontvanger_tel&&<div style={{display:"flex",gap:8}}>
+          <button onClick={callOntvanger} style={{flex:1,background:"#1A3A5C",color:"#58A6FF",border:"1px solid #58A6FF",borderRadius:4,padding:"10px",fontSize:13,fontWeight:600,fontFamily:"'DM Sans',sans-serif"}}>📞 Bellen</button>
+          <button onClick={waOntvanger} style={{flex:1,background:"#1a4731",color:"#3FB950",border:"1px solid #3FB950",borderRadius:4,padding:"10px",fontSize:13,fontWeight:600,fontFamily:"'DM Sans',sans-serif"}}>💬 WhatsApp</button>
+        </div>}
+      </div>
+
+      {/* Navigatie */}
+      <button onClick={openMaps} style={{width:"100%",background:"#1A3A5C",color:"#58A6FF",border:"1px solid #58A6FF",borderRadius:4,padding:"14px",fontSize:14,fontWeight:600,fontFamily:"'DM Sans',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginBottom:12}}>
+        🗺 Open in Google Maps
+      </button>
+
+      {/* Details */}
+      <div style={{background:"#161B22",border:"1px solid #21262D",borderRadius:4,padding:14,marginBottom:12}}>
+        <div style={{fontSize:10,color:"#8B949E",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Details</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+          {[
+            ["Ophaaladres",z.ophaaladres||"—"],
+            ["Pakkettype",z.pakkettype||"—"],
+            ["Gewicht",z.gewicht_kg?`${z.gewicht_kg} kg`:"—"],
+            ["COD",z.cod_bedrag>0?`SRD ${z.cod_bedrag}`:"Geen"],
+          ].map(([k,v])=><div key={k} style={{background:"#0D1117",borderRadius:2,padding:"8px 10px"}}>
+            <div style={{fontSize:10,color:"#8B949E",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>{k}</div>
+            <div style={{fontSize:13,color:"#E6EDF3"}}>{v}</div>
+          </div>)}
+        </div>
+        {z.notities&&<div style={{marginTop:10,padding:"8px 10px",background:"#0D1117",borderRadius:2}}>
+          <div style={{fontSize:10,color:"#8B949E",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>Notities</div>
+          <div style={{fontSize:13,color:"#E6EDF3"}}>{z.notities}</div>
+        </div>}
+      </div>
+    </div>
+
+    {/* ACTION BUTTONS */}
+    <div style={{padding:"12px 16px",background:"#111",borderTop:"1px solid #21262D",flexShrink:0,paddingBottom:"max(12px, env(safe-area-inset-bottom))"}}>
+      {flow?<button onClick={nextStatus} disabled={loading} style={{width:"100%",background:"#f01e2c",color:"#fff",border:"none",borderRadius:4,padding:"16px",fontSize:16,fontWeight:700,fontFamily:"'DM Sans',sans-serif",marginBottom:8,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+        {loading?<span style={{width:20,height:20,border:"2px solid rgba(255,255,255,.3)",borderTopColor:"#fff",borderRadius:"50%",display:"inline-block",animation:"spin .6s linear infinite"}}/>:"✓"}
+        {loading?"Even wachten...":flow.nextLabel}
+      </button>:
+      <div style={{background:"#112D24",border:"1px solid #3FB950",borderRadius:4,padding:"14px",textAlign:"center",color:"#3FB950",fontSize:14,fontWeight:600,marginBottom:8}}>
+        ✓ Zending voltooid
+      </div>}
+
+      {z.status!=="afgeleverd"&&z.status!=="mislukt"&&z.status!=="voltooid"&&<button onClick={()=>setShowMislukt(true)} style={{width:"100%",background:"transparent",color:"#f01e2c",border:"1px solid #f01e2c",borderRadius:4,padding:"11px",fontSize:13,fontWeight:600,fontFamily:"'DM Sans',sans-serif"}}>
+        ✕ Levering mislukt
+      </button>}
+    </div>
+  </div>
+}
+
+// ── MAIN APP ──────────────────────────────────────────────────────────────────
+function App(){
+  const [chauffeur,setChauffeur]=React.useState(null);
+  const [zendingen,setZendingen]=React.useState([]);
+  const [loading,setLoading]=React.useState(false);
+  const [detail,setDetail]=React.useState(null);
+  const [tab,setTab]=React.useState("vandaag");
+
+  // Try auto-login from localStorage
+  React.useEffect(()=>{
+    const saved=localStorage.getItem("sl_chauffeur");
+    if(saved){try{setChauffeur(JSON.parse(saved));}catch(e){}}
+  },[]);
+
+  React.useEffect(()=>{
+    if(chauffeur)load();
+  },[chauffeur]);
+
+  async function load(){
+    setLoading(true);
+    try{
+      const z=await db(`/zendingen?chauffeur_id=eq.${chauffeur.id}&select=*&order=aangemaakt_op.desc`);
+      setZendingen(z||[]);
+    }catch(e){}
+    setLoading(false);
+  }
+
+  function logout(){localStorage.removeItem("sl_chauffeur");setChauffeur(null);setZendingen([]);}
+
+  if(!chauffeur)return <Login onLogin={c=>{setChauffeur(c);}}/>;
+
+  const actief=zendingen.filter(z=>!["afgeleverd","voltooid","mislukt","geannuleerd"].includes(z.status));
+  const vandaag=zendingen.filter(z=>{
+    const d=new Date(z.aangemaakt_op);const n=new Date();
+    return d.toDateString()===n.toDateString();
+  });
+  const voltooid=zendingen.filter(z=>["afgeleverd","voltooid"].includes(z.status));
+  const mislukt=zendingen.filter(z=>z.status==="mislukt");
+
+  const tabData={vandaag,actief,voltooid,mislukt};
+  const shown=tabData[tab]||[];
+
+  if(detail)return <RitDetail z={detail} onClose={()=>{setDetail(null);load();}} onRefresh={load} chauffeur={chauffeur}/>;
+
+  return <div style={{height:"100vh",display:"flex",flexDirection:"column",background:"#0D1117"}}>
+
+    {/* TOPBAR */}
+    <div style={{background:"#111",borderBottom:"2px solid #f01e2c",padding:"10px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+      <div>
+        <div style={{display:"flex",alignItems:"center",fontFamily:"'Bebas Neue',sans-serif",fontSize:22,letterSpacing:1,lineHeight:1}}>
+          <span style={{color:"#E6EDF3",background:"#222",padding:"1px 6px"}}>SO</span>
+          <span style={{color:"#fff",background:"#f01e2c",padding:"1px 8px"}}>LOGICS</span>
+        </div>
+        <div style={{fontSize:11,color:"#8B949E",marginTop:2}}>{chauffeur.naam}</div>
+      </div>
+      <div style={{display:"flex",gap:8,alignItems:"center"}}>
+        <button onClick={load} style={{background:"#21262D",border:"none",color:"#8B949E",width:34,height:34,borderRadius:2,fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>↺</button>
+        <button onClick={logout} style={{background:"transparent",border:"1px solid #30363D",borderRadius:2,color:"#8B949E",padding:"6px 10px",fontSize:11,fontFamily:"'DM Sans',sans-serif"}}>Uitloggen</button>
+      </div>
+    </div>
+
+    {/* STATS ROW */}
+    <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:1,background:"#21262D",flexShrink:0}}>
+      {[
+        {l:"Actief",v:actief.length,c:"#58A6FF"},
+        {l:"Vandaag",v:vandaag.length,c:"#E6EDF3"},
+        {l:"Afgelev.",v:voltooid.length,c:"#3FB950"},
+        {l:"Mislukt",v:mislukt.length,c:mislukt.length>0?"#f01e2c":"#8B949E"},
+      ].map(s=><div key={s.l} style={{background:"#161B22",padding:"10px 8px",textAlign:"center"}}>
+        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:24,color:s.c,lineHeight:1}}>{s.v}</div>
+        <div style={{fontSize:9,color:"#8B949E",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.05em",marginTop:2}}>{s.l}</div>
+      </div>)}
+    </div>
+
+    {/* TABS */}
+    <div style={{display:"flex",background:"#0D1117",borderBottom:"1px solid #21262D",flexShrink:0}}>
+      {[
+        {id:"vandaag",l:"Vandaag"},
+        {id:"actief",l:"Actief"},
+        {id:"voltooid",l:"Klaar"},
+        {id:"mislukt",l:"Mislukt"},
+      ].map(t=><button key={t.id} onClick={()=>setTab(t.id)} style={{flex:1,background:"none",border:"none",borderBottom:tab===t.id?"2px solid #f01e2c":"2px solid transparent",color:tab===t.id?"#f01e2c":"#8B949E",padding:"11px 0",fontSize:12,fontWeight:tab===t.id?700:500,fontFamily:"'DM Sans',sans-serif",cursor:"pointer"}}>
+        {t.l}
+      </button>)}
+    </div>
+
+    {/* LIST */}
+    <div style={{flex:1,overflowY:"auto",padding:"12px 14px",paddingBottom:"max(12px,env(safe-area-inset-bottom))"}}>
+      {loading&&<div style={{textAlign:"center",color:"#8B949E",padding:32,fontSize:13}}>
+        <span style={{display:"inline-block",width:20,height:20,border:"2px solid #21262D",borderTopColor:"#f01e2c",borderRadius:"50%",animation:"spin .6s linear infinite"}}/>
+      </div>}
+
+      {!loading&&shown.length===0&&<div style={{textAlign:"center",color:"#484F58",padding:48}}>
+        <div style={{fontSize:40,marginBottom:12}}>
+          {tab==="actief"?"🏁":tab==="vandaag"?"📅":tab==="voltooid"?"✅":"❌"}
+        </div>
+        <div style={{fontSize:13}}>
+          {tab==="actief"?"Geen actieve ritten"
+          :tab==="vandaag"?"Geen ritten voor vandaag"
+          :tab==="voltooid"?"Nog niets afgeleverd"
+          :"Geen mislukte ritten"}
+        </div>
+      </div>}
+
+      {!loading&&shown.map(z=><RitKaart key={z.id} z={z} onTap={setDetail}/>)}
+    </div>
+
+  </div>
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
