@@ -82,8 +82,10 @@ const STATUS_COLOR={
 function Login({onLogin}){
   const [chauffeurs,setChauffeurs]=React.useState([]);
   const [sel,setSel]=React.useState("");
+  const [pincode,setPincode]=React.useState("");
   const [loading,setLoading]=React.useState(true);
   const [err,setErr]=React.useState("");
+  const [show,setShow]=React.useState(false);
 
   React.useEffect(()=>{
     db("/chauffeurs?select=*&actief=eq.true&order=naam.asc").then(r=>{setChauffeurs(r||[]);setLoading(false);}).catch(()=>setLoading(false));
@@ -91,8 +93,12 @@ function Login({onLogin}){
 
   function login(){
     if(!sel){setErr("Selecteer jouw naam");return;}
+    if(!pincode){setErr("Voer je pincode in");return;}
     const c=chauffeurs.find(c=>c.id===sel);
-    if(c){localStorage.setItem("sl_chauffeur",JSON.stringify(c));onLogin(c);}
+    if(!c){setErr("Chauffeur niet gevonden");return;}
+    if(c.pincode!==pincode){setErr("Onjuiste pincode");return;}
+    localStorage.setItem("sl_chauffeur",JSON.stringify(c));
+    onLogin(c);
   }
 
   return <div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24,background:"#0D1117"}}>
@@ -102,21 +108,44 @@ function Login({onLogin}){
     </div>
     <div style={{fontSize:13,color:"#8B949E",marginBottom:36}}>Chauffeur App</div>
 
-    <div style={{width:"100%",maxWidth:340,display:"flex",flexDirection:"column",gap:14}}>
-      <div style={{background:"#161B22",border:"1px solid #21262D",borderRadius:4,padding:20}}>
-        <div style={{fontSize:12,color:"#8B949E",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Wie ben jij?</div>
-        {loading?<div style={{color:"#8B949E",fontSize:13,textAlign:"center",padding:12}}>Laden...</div>:
-        chauffeurs.length===0?<div style={{color:"#f01e2c",fontSize:13}}>Geen chauffeurs gevonden. Vraag de admin om jou toe te voegen.</div>:
-        <select style={{width:"100%",background:"#0D1117",border:"1px solid #30363D",borderRadius:2,color:sel?"#E6EDF3":"#484F58",padding:"12px 10px",fontSize:15,outline:"none"}} value={sel} onChange={e=>setSel(e.target.value)}>
-          <option value="">Selecteer jouw naam...</option>
-          {chauffeurs.map(c=><option key={c.id} value={c.id}>{c.naam}</option>)}
-        </select>}
-        {err&&<div style={{color:"#f01e2c",fontSize:12,marginTop:8}}>{err}</div>}
+    <div style={{width:"100%",maxWidth:340,background:"#161B22",border:"1px solid #21262D",borderRadius:4,padding:24}}>
+      <div style={{marginBottom:16}}>
+        <div style={{fontSize:12,color:"#8B949E",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Jouw naam</div>
+        {loading
+          ?<div style={{color:"#8B949E",fontSize:13,textAlign:"center",padding:12}}>Laden...</div>
+          :chauffeurs.length===0
+            ?<div style={{color:"#f01e2c",fontSize:13}}>Geen chauffeurs gevonden. Vraag de admin om jou toe te voegen.</div>
+            :<select style={{width:"100%",background:"#0D1117",border:"1px solid #30363D",borderRadius:2,color:sel?"#E6EDF3":"#484F58",padding:"12px 10px",fontSize:15,outline:"none"}} value={sel} onChange={e=>{setSel(e.target.value);setErr("");}}>
+              <option value="">Selecteer jouw naam...</option>
+              {chauffeurs.map(c=><option key={c.id} value={c.id}>{c.naam}</option>)}
+            </select>
+        }
       </div>
-      <button onClick={login} style={{background:"#f01e2c",color:"#fff",border:"none",borderRadius:4,padding:"15px",fontSize:15,fontWeight:700,width:"100%",fontFamily:"'DM Sans',sans-serif"}}>
+      <div style={{marginBottom:20}}>
+        <div style={{fontSize:12,color:"#8B949E",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Pincode</div>
+        <div style={{position:"relative"}}>
+          <input
+            style={{width:"100%",background:"#0D1117",border:"1px solid #30363D",borderRadius:2,color:"#E6EDF3",padding:"12px 40px 12px 12px",fontSize:18,outline:"none",fontFamily:"'DM Sans',sans-serif",letterSpacing:"0.3em",textAlign:"center"}}
+            type={show?"text":"password"}
+            inputMode="numeric"
+            maxLength={6}
+            value={pincode}
+            onChange={e=>setPincode(e.target.value.replace(/\D/g,""))}
+            onKeyDown={e=>e.key==="Enter"&&login()}
+            placeholder="••••"
+          />
+          <button onClick={()=>setShow(s=>!s)} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#8B949E",cursor:"pointer",fontSize:16}}>
+            {show?"🙈":"👁"}
+          </button>
+        </div>
+        <div style={{fontSize:11,color:"#484F58",marginTop:6,textAlign:"center"}}>Standaard pincode: 1234</div>
+      </div>
+      {err&&<div style={{background:"#2a0408",border:"1px solid #f01e2c",borderRadius:2,padding:"8px 12px",color:"#f01e2c",fontSize:12,marginBottom:14}}>{err}</div>}
+      <button onClick={login} style={{width:"100%",background:"#f01e2c",color:"#fff",border:"none",borderRadius:4,padding:"14px",fontSize:15,fontWeight:700,fontFamily:"'DM Sans',sans-serif"}}>
         Inloggen →
       </button>
     </div>
+    <div style={{marginTop:16,fontSize:11,color:"#484F58"}}>SOlogics Suriname © 2026</div>
   </div>
 }
 
