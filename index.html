@@ -37,7 +37,9 @@ const KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6
 const H={"Content-Type":"application/json",apikey:KEY,Authorization:`Bearer ${KEY}`};
 
 async function db(path,o={}){
-  const r=await fetch(SUPA_URL+"/rest/v1"+path,{headers:{...H,...(o.headers||{})},...o});
+  const sep=path.includes("?") ? "&" : "?";
+  const url=SUPA_URL+"/rest/v1"+path+sep+"apikey="+KEY;
+  const r=await fetch(url,{headers:{...H,...(o.headers||{})},...o});
   if(!r.ok)throw new Error(await r.text());
   if(r.status===204)return null;
   return r.json();
