@@ -50,8 +50,10 @@ async function db(path,o={}){
   }
   const r=await fetch(url,{...o,method,headers:reqHeaders});
   if(!r.ok)throw new Error(await r.text());
-  if(r.status===204)return null;
-  return r.json();
+  if(r.status===204||r.status===201)return null;
+  const text=await r.text();
+  if(!text||text.trim()==="")return null;
+  return JSON.parse(text);
 }
 
 const fd=d=>d?new Date(d).toLocaleDateString("nl-NL",{day:"2-digit",month:"short",year:"numeric"}):"—";
