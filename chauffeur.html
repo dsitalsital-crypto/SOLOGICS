@@ -189,25 +189,26 @@ function RitDetail({z,onClose,onRefresh,chauffeur}){
 
   const flow=STATUS_FLOW[z.status];
 
+  const [showPOD,setShowPOD]=React.useState(false);
+
   async function nextStatus(){
     if(!flow)return;
+    // Toon POD scherm bij aflevering
+    if(flow.next==="afgeleverd"){
+      setShowPOD(true);return;
+    }
     setLoading(true);
-    // Get GPS if available
     let lat=null,lng=null;
     try{
       const pos=await new Promise((res,rej)=>navigator.geolocation.getCurrentPosition(res,rej,{timeout:5000}));
       lat=pos.coords.latitude;lng=pos.coords.longitude;
     }catch(e){}
-
     await db(`/zendingen?id=eq.${z.id}`,{method:"PATCH",headers:{Prefer:"return=representation"},body:JSON.stringify({status:flow.next})});
     await db("/status_logs",{method:"POST",headers:{Prefer:"return=representation"},body:JSON.stringify({zending_id:z.id,status:flow.next,lat,lng})});
-
-    // If afgeleverd and COD, show COD confirmation
-    if(flow.next==="afgeleverd"&&z.cod_bedrag>0){
-      setLoading(false);setShowCOD(true);return;
-    }
     setLoading(false);onRefresh();onClose();
   }
+
+  if(showPOD)return <PODScreen z={z} chauffeur={chauffeur} onClose={()=>setShowPOD(false)} onDone={()=>{if(z.cod_bedrag>0){setShowPOD(false);setShowCOD(true);}else{onRefresh();onClose();}}}/>
 
   async function markMislukt(){
     setLoading(true);
