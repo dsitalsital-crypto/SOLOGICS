@@ -25,15 +25,28 @@ button{-webkit-tap-highlight-color:transparent}
 <div id="root"></div>
 <script type="text/babel">
 
-const URL="https://bvnyzxusfiloaivvhlnn.supabase.co";
+const SUPA_URL="https://bvnyzxusfiloaivvhlnn.supabase.co";
 const KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ2bnl6eHVzZmlsb2FpdnZobG5uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2NjAzMjcsImV4cCI6MjA5MzIzNjMyN30.uT4KjSUxK9rwINGRktVcUgu3vdwvuoQ3lEFfccfJTQY";
-const H={"Content-Type":"application/json",apikey:KEY,Authorization:`Bearer ${KEY}`};
+
 
 async function db(path,o={}){
-  const r=await fetch(URL+"/rest/v1"+path,{headers:{...H,...(o.headers||{})},...o});
+  const sep=path.includes("?") ? "&" : "?";
+  const url=SUPA_URL+"/rest/v1"+path+sep+"apikey="+KEY;
+  const method=o.method||"GET";
+  const reqHeaders=new Headers();
+  reqHeaders.set("apikey",KEY);
+  reqHeaders.set("Authorization","Bearer "+KEY);
+  reqHeaders.set("Accept","application/json");
+  if(method!=="GET"&&method!=="DELETE"){
+    reqHeaders.set("Content-Type","application/json");
+  }
+  if(o.headers){Object.entries(o.headers).forEach(([k,v])=>reqHeaders.set(k,v));}
+  const r=await fetch(url,{...o,method,headers:reqHeaders});
   if(!r.ok)throw new Error(await r.text());
-  if(r.status===204)return null;
-  return r.json();
+  if(r.status===204||r.status===201)return null;
+  const text=await r.text();
+  if(!text||text.trim()==="")return null;
+  return JSON.parse(text);
 }
 
 const fd=d=>d?new Date(d).toLocaleDateString("nl-NL",{day:"2-digit",month:"long",year:"numeric"}):"—";
