@@ -675,6 +675,152 @@ function AdminLogin({onLogin}){
   </div>
 }
 
+
+// ── RAPPORTAGES ───────────────────────────────────────────────────────────────
+function Rapportages({zendingen,chauffeurs}){
+  const [periode,setPeriode]=React.useState("vandaag");
+
+  const nu=new Date();
+  const filtered=zendingen.filter(z=>{
+    const d=new Date(z.aangemaakt_op);
+    if(periode==="vandaag") return d.toDateString()===nu.toDateString();
+    if(periode==="week"){
+      const week=new Date(nu);week.setDate(nu.getDate()-7);
+      return d>=week;
+    }
+    if(periode==="maand"){
+      return d.getMonth()===nu.getMonth()&&d.getFullYear()===nu.getFullYear();
+    }
+    return true;
+  });
+
+  const afgeleverd=filtered.filter(z=>z.status==="afgeleverd"||z.status==="voltooid");
+  const mislukt=filtered.filter(z=>z.status==="mislukt");
+  const onderweg=filtered.filter(z=>z.status==="onderweg");
+  const succes=filtered.length>0?Math.round((afgeleverd.length/filtered.length)*100):0;
+  const cod_totaal=filtered.filter(z=>z.cod_bedrag>0).reduce((a,z)=>a+parseFloat(z.cod_bedrag||0),0);
+  const cod_ontvangen=filtered.filter(z=>z.cod_ontvangen).reduce((a,z)=>a+parseFloat(z.cod_bedrag||0),0);
+  const cod_open=cod_totaal-cod_ontvangen;
+
+  // Per chauffeur stats
+  const chStats=chauffeurs.map(c=>{
+    const cz=filtered.filter(z=>z.chauffeur_id===c.id);
+    const ca=cz.filter(z=>z.status==="afgeleverd"||z.status==="voltooid");
+    const cm=cz.filter(z=>z.status==="mislukt");
+    const ccod=cz.filter(z=>z.cod_ontvangen).reduce((a,z)=>a+parseFloat(z.cod_bedrag||0),0);
+    return {...c,totaal:cz.length,afgeleverd:ca.length,mislukt:cm.length,cod:ccod,succes:cz.length>0?Math.round((ca.length/cz.length)*100):0};
+  }).filter(c=>c.totaal>0).sort((a,b)=>b.totaal-a.totaal);
+
+  // Per district
+  const districts=[...new Set(filtered.map(z=>z.district).filter(Boolean))];
+  const distStats=districts.map(d=>{
+    const dz=filtered.filter(z=>z.district===d);
+    return {district:d,totaal:dz.length,afgeleverd:dz.filter(z=>["afgeleverd","voltooid"].includes(z.status)).length};
+  }).sort((a,b)=>b.totaal-a.totaal);
+
+  return <div style={{display:"flex",flexDirection:"column",gap:16}}>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:10}}>
+      <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:26,letterSpacing:1}}>Rapportages</div>
+      <div style={{display:"flex",gap:3,background:"#0D1117",padding:3,borderRadius:2}}>
+        {[{id:"vandaag",l:"Vandaag"},{id:"week",l:"Week"},{id:"maand",l:"Maand"},{id:"alles",l:"Alles"}].map(p=>
+          <button key={p.id} onClick={()=>setPeriode(p.id)} style={{padding:"6px 12px",borderRadius:2,fontSize:12,cursor:"pointer",border:"none",fontFamily:"'DM Sans',sans-serif",background:periode===p.id?"#161B22":"transparent",color:periode===p.id?"#f01e2c":"#8B949E",fontWeight:periode===p.id?700:400}}>
+            {p.l}
+          </button>
+        )}
+      </div>
+    </div>
+
+    {/* KPI stats */}
+    <div className="stats-grid" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
+      {[
+        {l:"Totaal zendingen",v:filtered.length,c:"#E6EDF3"},
+        {l:"Afgeleverd",v:afgeleverd.length,c:"#3FB950"},
+        {l:"Mislukt",v:mislukt.length,c:mislukt.length>0?"#f01e2c":"#8B949E"},
+        {l:"Succespercentage",v:`${succes}%`,c:succes>=80?"#3FB950":succes>=60?"#D29922":"#f01e2c"},
+      ].map(s=><div key={s.l} style={{background:"#161B22",border:"1px solid #21262D",borderTop:"2px solid #f01e2c",borderRadius:2,padding:"12px 10px"}}>
+        <div style={{fontSize:10,color:"#8B949E",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.05em",lineHeight:1.3}}>{s.l}</div>
+        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:34,color:s.c,lineHeight:1,marginTop:4}}>{s.v}</div>
+      </div>)}
+    </div>
+
+    {/* COD overzicht */}
+    <div style={{background:"#161B22",border:"1px solid #21262D",borderRadius:2,padding:16}}>
+      <div style={{fontSize:13,fontWeight:600,marginBottom:12}}>💰 COD Rembours Overzicht</div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
+        {[
+          {l:"Totaal COD",v:`SRD ${cod_totaal.toFixed(2)}`,c:"#E6EDF3"},
+          {l:"Ontvangen",v:`SRD ${cod_ontvangen.toFixed(2)}`,c:"#3FB950"},
+          {l:"Nog open",v:`SRD ${cod_open.toFixed(2)}`,c:cod_open>0?"#D29922":"#3FB950"},
+        ].map(s=><div key={s.l} style={{background:"#0D1117",borderRadius:2,padding:"10px 12px"}}>
+          <div style={{fontSize:10,color:"#8B949E",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.05em"}}>{s.l}</div>
+          <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:22,color:s.c,marginTop:4}}>{s.v}</div>
+        </div>)}
+      </div>
+    </div>
+
+    {/* Chauffeur prestaties */}
+    <div style={{background:"#161B22",border:"1px solid #21262D",borderRadius:2,padding:16}}>
+      <div style={{fontSize:13,fontWeight:600,marginBottom:12}}>🚚 Chauffeur Prestaties</div>
+      {chStats.length===0&&<div style={{color:"#8B949E",fontSize:13}}>Geen data voor deze periode</div>}
+      <div style={{overflowX:"auto"}}>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:13,minWidth:400}}>
+          <thead style={{background:"#0D1117"}}>
+            <tr>
+              {["Chauffeur","Totaal","Afgelev.","Mislukt","Succes%","COD ontvangen"].map(h=>
+                <th key={h} style={{textAlign:"left",padding:"8px 12px",fontSize:10,fontWeight:700,color:"#8B949E",textTransform:"uppercase",letterSpacing:"0.06em",borderBottom:"1px solid #21262D",whiteSpace:"nowrap"}}>{h}</th>
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {chStats.map(c=><tr key={c.id}>
+              <td style={{padding:"10px 12px",color:"#E6EDF3",fontWeight:500}}>{c.naam}</td>
+              <td style={{padding:"10px 12px",color:"#C9D1D9"}}>{c.totaal}</td>
+              <td style={{padding:"10px 12px",color:"#3FB950",fontWeight:600}}>{c.afgeleverd}</td>
+              <td style={{padding:"10px 12px",color:c.mislukt>0?"#f01e2c":"#8B949E"}}>{c.mislukt}</td>
+              <td style={{padding:"10px 12px"}}>
+                <span style={{background:c.succes>=80?"#112D24":c.succes>=60?"#2D1D00":"#2a0408",color:c.succes>=80?"#3FB950":c.succes>=60?"#D29922":"#f01e2c",padding:"2px 8px",borderRadius:2,fontSize:11,fontWeight:700}}>{c.succes}%</span>
+              </td>
+              <td style={{padding:"10px 12px",color:"#D29922",fontWeight:600}}>SRD {c.cod.toFixed(2)}</td>
+            </tr>)}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    {/* District verdeling */}
+    {distStats.length>0&&<div style={{background:"#161B22",border:"1px solid #21262D",borderRadius:2,padding:16}}>
+      <div style={{fontSize:13,fontWeight:600,marginBottom:12}}>📍 Per District</div>
+      {distStats.map(d=>{
+        const pct=d.totaal>0?Math.round((d.afgeleverd/d.totaal)*100):0;
+        return <div key={d.district} style={{marginBottom:10}}>
+          <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}>
+            <span style={{color:"#E6EDF3",fontWeight:500}}>{d.district}</span>
+            <span style={{color:"#8B949E"}}>{d.afgeleverd}/{d.totaal} · {pct}%</span>
+          </div>
+          <div style={{height:4,background:"#21262D",borderRadius:2}}>
+            <div style={{height:4,width:`${pct}%`,background:pct>=80?"#3FB950":pct>=60?"#D29922":"#f01e2c",borderRadius:2}}/>
+          </div>
+        </div>
+      })}
+    </div>}
+
+    {/* COD per chauffeur detail */}
+    {chStats.filter(c=>c.cod>0).length>0&&<div style={{background:"#161B22",border:"1px solid #21262D",borderRadius:2,padding:16}}>
+      <div style={{fontSize:13,fontWeight:600,marginBottom:12}}>💵 COD Afrekening per Chauffeur</div>
+      {chStats.filter(c=>c.cod>0).map(c=><div key={c.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 0",borderBottom:"1px solid #21262D",fontSize:13}}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <div style={{width:32,height:32,borderRadius:2,background:"#112D24",color:"#3FB950",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700}}>{c.naam.slice(0,2).toUpperCase()}</div>
+          <span style={{fontWeight:500}}>{c.naam}</span>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <span style={{color:"#3FB950",fontWeight:700,fontSize:15}}>SRD {c.cod.toFixed(2)}</span>
+          <span style={{background:"#112D24",color:"#3FB950",fontSize:10,fontWeight:700,padding:"2px 6px",borderRadius:2}}>ONTVANGEN</span>
+        </div>
+      </div>)}
+    </div>}
+  </div>
+}
+
 // ── ROOT ──────────────────────────────────────────────────────────────────────
 function App(){
   const [loggedIn,setLoggedIn]=React.useState(()=>sessionStorage.getItem("sl_admin")==="1");
@@ -710,6 +856,7 @@ function App(){
     {id:"dispatch",icon:"⊹",label:"Dispatch",badge:open_dispatch},
     {id:"chauffeurs",icon:"◉",label:"Chauffeurs"},
     {id:"klanten",icon:"◈",label:"Klanten"},
+    {id:"rapportages",icon:"📊",label:"Rapportages"},
   ];
 
   return <div style={{fontFamily:"'DM Sans',sans-serif",background:"#0D1117",color:"#E6EDF3",minHeight:"100vh",display:"flex",flexDirection:"column"}}>
@@ -751,6 +898,7 @@ function App(){
             {page==="dispatch"&&<Dispatch zendingen={zendingen} chauffeurs={chauffeurs} onRefresh={load}/>}
             {page==="chauffeurs"&&<Chauffeurs chauffeurs={chauffeurs} zendingen={zendingen} onRefresh={load}/>}
             {page==="klanten"&&<Klanten klanten={klanten} zendingen={zendingen} onRefresh={load}/>}
+            {page==="rapportages"&&<Rapportages zendingen={zendingen} chauffeurs={chauffeurs}/>}
           </>
         }
       </div>
