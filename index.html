@@ -405,7 +405,7 @@ function Zendingen({zendingen,chauffeurs,klanten,onRefresh}){
 // ── CHAUFFEURS ────────────────────────────────────────────────────────────────
 function Chauffeurs({chauffeurs,zendingen,onRefresh}){
   const [showNew,setShowNew]=React.useState(false);
-  const [form,setForm]=React.useState({naam:"",telefoon:"",email:"",kenteken:"",voertuig:"",actief:true});
+  const [form,setForm]=React.useState({naam:"",telefoon:"",email:"",kenteken:"",voertuig:"",pincode:"1234",actief:true});
   const [saving,setSaving]=React.useState(false);
   const [err,setErr]=React.useState("");
 
@@ -414,7 +414,7 @@ function Chauffeurs({chauffeurs,zendingen,onRefresh}){
     setSaving(true);setErr("");
     try{
       await db("/chauffeurs",{method:"POST",headers:{Prefer:"return=representation"},body:JSON.stringify(form)});
-      setShowNew(false);setForm({naam:"",telefoon:"",email:"",kenteken:"",voertuig:"",actief:true});onRefresh();
+      setShowNew(false);setForm({naam:"",telefoon:"",email:"",kenteken:"",voertuig:"",pincode:"1234",actief:true});onRefresh();
     }catch(e){setErr(e.message);}
     setSaving(false);
   }
@@ -475,6 +475,7 @@ function Chauffeurs({chauffeurs,zendingen,onRefresh}){
         <Fld l="Email" ch={<input style={S.inp} type="email" value={form.email} onChange={e=>setForm(f=>({...f,email:e.target.value}))}/>}/>
         <Fld l="Voertuig" ch={<input style={S.inp} value={form.voertuig} onChange={e=>setForm(f=>({...f,voertuig:e.target.value}))} placeholder="Auto, motor, bestelwagen..."/>}/>
         <Fld l="Kenteken" ch={<input style={S.inp} value={form.kenteken} onChange={e=>setForm(f=>({...f,kenteken:e.target.value}))}/>}/>
+        <Fld l="Pincode" ch={<input style={S.inp} type="number" maxLength={6} value={form.pincode} onChange={e=>setForm(f=>({...f,pincode:e.target.value}))} placeholder="bijv. 1234"/>}/>
       </div>
       {err&&<div style={{color:"#f01e2c",fontSize:12,marginBottom:10}}>{err}</div>}
       <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
@@ -622,8 +623,63 @@ function Dispatch({zendingen,chauffeurs,onRefresh}){
   </div>
 }
 
+
+// ── ADMIN LOGIN ───────────────────────────────────────────────────────────────
+const ADMIN_USER = "admin";
+const ADMIN_PASS = "Sologics2026";
+
+function AdminLogin({onLogin}){
+  const [user,setUser]=React.useState("");
+  const [pass,setPass]=React.useState("");
+  const [err,setErr]=React.useState("");
+  const [show,setShow]=React.useState(false);
+
+  function login(){
+    if(user===ADMIN_USER&&pass===ADMIN_PASS){
+      sessionStorage.setItem("sl_admin","1");
+      onLogin();
+    } else {
+      setErr("Onjuiste gebruikersnaam of wachtwoord");
+    }
+  }
+
+  return <div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24,background:"#0D1117"}}>
+    <div style={{display:"flex",alignItems:"center",fontFamily:"'Bebas Neue',sans-serif",fontSize:36,letterSpacing:1,lineHeight:1,marginBottom:6}}>
+      <span style={{color:"#E6EDF3",background:"#222",padding:"3px 10px"}}>SO</span>
+      <span style={{color:"#fff",background:"#f01e2c",padding:"3px 12px"}}>LOGICS</span>
+    </div>
+    <div style={{fontSize:12,color:"#8B949E",marginBottom:40,letterSpacing:"0.1em",textTransform:"uppercase"}}>Admin Dashboard</div>
+
+    <div style={{width:"100%",maxWidth:360,background:"#161B22",border:"1px solid #21262D",borderRadius:4,padding:24}}>
+      <div style={{marginBottom:16}}>
+        <label style={{fontSize:11,color:"#8B949E",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6,display:"block"}}>Gebruikersnaam</label>
+        <input style={{width:"100%",background:"#0D1117",border:"1px solid #30363D",borderRadius:2,color:"#E6EDF3",padding:"11px 12px",fontSize:14,outline:"none",fontFamily:"'DM Sans',sans-serif"}}
+          value={user} onChange={e=>setUser(e.target.value)} onKeyDown={e=>e.key==="Enter"&&login()} placeholder="admin"/>
+      </div>
+      <div style={{marginBottom:20}}>
+        <label style={{fontSize:11,color:"#8B949E",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6,display:"block"}}>Wachtwoord</label>
+        <div style={{position:"relative"}}>
+          <input style={{width:"100%",background:"#0D1117",border:"1px solid #30363D",borderRadius:2,color:"#E6EDF3",padding:"11px 40px 11px 12px",fontSize:14,outline:"none",fontFamily:"'DM Sans',sans-serif"}}
+            type={show?"text":"password"} value={pass} onChange={e=>setPass(e.target.value)} onKeyDown={e=>e.key==="Enter"&&login()} placeholder="••••••••"/>
+          <button onClick={()=>setShow(s=>!s)} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#8B949E",cursor:"pointer",fontSize:16}}>
+            {show?"🙈":"👁"}
+          </button>
+        </div>
+      </div>
+      {err&&<div style={{background:"#2a0408",border:"1px solid #f01e2c",borderRadius:2,padding:"8px 12px",color:"#f01e2c",fontSize:12,marginBottom:14}}>{err}</div>}
+      <button onClick={login} style={{width:"100%",background:"#f01e2c",color:"#fff",border:"none",borderRadius:2,padding:"13px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>
+        Inloggen →
+      </button>
+    </div>
+    <div style={{marginTop:16,fontSize:11,color:"#484F58"}}>SOlogics Suriname © 2026</div>
+  </div>
+}
+
 // ── ROOT ──────────────────────────────────────────────────────────────────────
 function App(){
+  const [loggedIn,setLoggedIn]=React.useState(()=>sessionStorage.getItem("sl_admin")==="1");
+  if(!loggedIn)return <AdminLogin onLogin={()=>setLoggedIn(true)}/>;
+
   const [page,setPage]=React.useState("dashboard");
   const [zendingen,setZendingen]=React.useState([]);
   const [chauffeurs,setChauffeurs]=React.useState([]);
@@ -667,7 +723,8 @@ function App(){
       <div style={{display:"flex",alignItems:"center",gap:8}}>
         <div style={{width:7,height:7,borderRadius:"50%",background:error?"#f01e2c":"#3FB950"}}/>
         <span style={{fontSize:11,color:"#8B949E"}}>{error?"Offline":"Live"}</span>
-        <button onClick={load} style={{...S.btnGhost,padding:"5px 10px",fontSize:12,marginLeft:4}}>↺</button>
+        <button onClick={load} style={{...S.btnGhost,padding:"5px 10px",fontSize:12}}>↺</button>
+        <button onClick={()=>{sessionStorage.removeItem("sl_admin");window.location.reload();}} style={{...S.btnGhost,padding:"5px 10px",fontSize:12,color:"#f01e2c",borderColor:"#f01e2c"}}>Uitloggen</button>
       </div>
     </div>
 
