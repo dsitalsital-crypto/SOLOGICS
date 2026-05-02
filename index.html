@@ -1,149 +1,165 @@
 <!DOCTYPE html>
 <html lang="nl">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
 <title>SOlogics</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Bebas+Neue&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <style>
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{background:#0D1117;font-family:'DM Sans',sans-serif;color:#E6EDF3}
-  ::-webkit-scrollbar{width:6px;height:6px}
-  ::-webkit-scrollbar-track{background:#0D1117}
-  ::-webkit-scrollbar-thumb{background:#21262D;border-radius:2px}
-  input,select,textarea{font-family:'DM Sans',sans-serif;color:#E6EDF3}
-  input::placeholder,textarea::placeholder{color:#484F58}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0D1117;font-family:'DM Sans',sans-serif;color:#E6EDF3;overflow-x:hidden}
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:#0D1117}::-webkit-scrollbar-thumb{background:#21262D;border-radius:2px}
+input,select,textarea{font-family:'DM Sans',sans-serif;color:#E6EDF3;-webkit-appearance:none}
+input::placeholder,textarea::placeholder{color:#484F58}
+button{-webkit-tap-highlight-color:transparent}
+@media(max-width:700px){
+  .sidebar{display:none!important}
+  .bottom-nav{display:flex!important}
+  .main-wrap{padding-bottom:72px!important}
+  .hide-mob{display:none!important}
+  .stats-grid{grid-template-columns:1fr 1fr!important}
+  .two-col{grid-template-columns:1fr!important}
+  .modal-box{width:98vw!important;border-radius:6px 6px 0 0!important;max-height:88vh!important}
+  .page-head{flex-wrap:wrap!important;gap:10px!important}
+  .page-head button{flex:1!important;justify-content:center!important}
+}
 </style>
 </head>
 <body>
 <div id="root"></div>
 <script type="text/babel">
 
-const SUPABASE_URL = "https://bvnyzxusfiloaivvhlnn.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ2bnl6eHVzZmlsb2FpdnZobG5uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2NjAzMjcsImV4cCI6MjA5MzIzNjMyN30.uT4KjSUxK9rwINGRktVcUgu3vdwvuoQ3lEFfccfJTQY";
+const URL="https://bvnyzxusfiloaivvhlnn.supabase.co";
+const KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ2bnl6eHVzZmlsb2FpdnZobG5uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2NjAzMjcsImV4cCI6MjA5MzIzNjMyN30.uT4KjSUxK9rwINGRktVcUgu3vdwvuoQ3lEFfccfJTQY";
+const H={"Content-Type":"application/json",apikey:KEY,Authorization:`Bearer ${KEY}`};
 
-const hdrs = {
-  "Content-Type":"application/json",
-  apikey: SUPABASE_KEY,
-  Authorization:`Bearer ${SUPABASE_KEY}`
-};
-
-async function db(path, opts={}) {
-  const r = await fetch(SUPABASE_URL+"/rest/v1"+path,{headers:{...hdrs,...(opts.headers||{})}, ...opts});
-  if(!r.ok) throw new Error(await r.text());
-  if(r.status===204) return null;
+async function db(path,o={}){
+  const r=await fetch(URL+"/rest/v1"+path,{headers:{...H,...(o.headers||{})},...o});
+  if(!r.ok)throw new Error(await r.text());
+  if(r.status===204)return null;
   return r.json();
 }
 
-const fmtDate = d => d ? new Date(d).toLocaleDateString("nl-NL",{day:"2-digit",month:"short",year:"numeric"}) : "—";
+const fd=d=>d?new Date(d).toLocaleDateString("nl-NL",{day:"2-digit",month:"short",year:"numeric"}):"—";
+const fs=d=>d?new Date(d).toLocaleDateString("nl-NL",{day:"2-digit",month:"short"}):"—";
 
-const STATUS = {
-  in_behandeling:{label:"In behandeling",color:"#D29922",bg:"#2D1D00"},
-  onderweg:      {label:"Onderweg",       color:"#58A6FF",bg:"#1A3A5C"},
-  afgeleverd:    {label:"Afgeleverd",     color:"#3FB950",bg:"#112D24"},
-  vertraging:    {label:"Vertraging",     color:"#f01e2c",bg:"#2a0408"},
-  geannuleerd:   {label:"Geannuleerd",    color:"#8B949E",bg:"#21262D"},
+const ZSTATUS={
+  aangemaakt:   {l:"Aangemaakt",    s:"Aangemaakt", c:"#8B949E",bg:"#21262D"},
+  toegewezen:   {l:"Toegewezen",    s:"Toegewezen", c:"#BC8CFF",bg:"#2A1F5A"},
+  geaccepteerd: {l:"Geaccepteerd",  s:"Geaccepteerd",c:"#58A6FF",bg:"#1A3A5C"},
+  naar_ophaling:{l:"Naar ophaling", s:"Ophaling",   c:"#D29922",bg:"#2D1D00"},
+  opgehaald:    {l:"Opgehaald",     s:"Opgehaald",  c:"#F0883E",bg:"#2D1800"},
+  onderweg:     {l:"Onderweg",      s:"Onderweg",   c:"#58A6FF",bg:"#1A3A5C"},
+  aangekomen:   {l:"Aangekomen",    s:"Aangekomen", c:"#79B8FF",bg:"#1A3A5C"},
+  afgeleverd:   {l:"Afgeleverd",    s:"Afgelev.",   c:"#3FB950",bg:"#112D24"},
+  mislukt:      {l:"Mislukt",       s:"Mislukt",    c:"#f01e2c",bg:"#2a0408"},
+  retour:       {l:"Retour",        s:"Retour",     c:"#D29922",bg:"#2D1D00"},
+  voltooid:     {l:"Voltooid",      s:"Voltooid",   c:"#3FB950",bg:"#112D24"},
 };
 
-const S = {
-  topbar:{background:"#111",borderBottom:"2px solid #f01e2c",padding:"0 24px",display:"flex",alignItems:"center",justifyContent:"space-between",height:58,flexShrink:0},
-  sidebar:{width:200,background:"#161B22",borderRight:"1px solid #21262D",padding:"16px 12px",display:"flex",flexDirection:"column",gap:4,flexShrink:0,overflowY:"auto"},
-  main:{flex:1,overflowY:"auto",padding:24,display:"flex",flexDirection:"column",gap:20},
-  card:{background:"#161B22",border:"1px solid #21262D",borderRadius:2,padding:16},
-  statCard:{background:"#161B22",border:"1px solid #21262D",borderTop:"2px solid #f01e2c",borderRadius:2,padding:16},
-  tableWrap:{background:"#161B22",border:"1px solid #21262D",borderRadius:2,overflow:"hidden"},
-  btn:{background:"#f01e2c",color:"#fff",border:"none",borderRadius:2,padding:"8px 16px",fontSize:13,fontWeight:500,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:6,fontFamily:"'DM Sans',sans-serif"},
-  btnGhost:{background:"transparent",color:"#8B949E",border:"1px solid #30363D",borderRadius:2,padding:"6px 12px",fontSize:12,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"},
-  input:{background:"#0D1117",border:"1px solid #30363D",borderRadius:2,color:"#E6EDF3",padding:"8px 10px",fontSize:13,width:"100%",outline:"none"},
-  select:{background:"#0D1117",border:"1px solid #30363D",borderRadius:2,color:"#E6EDF3",padding:"8px 10px",fontSize:13,width:"100%",outline:"none"},
-  label:{fontSize:11,color:"#8B949E",textTransform:"uppercase",letterSpacing:"0.06em",fontWeight:600,marginBottom:4,display:"block"},
-  pageTitle:{fontFamily:"'Bebas Neue',sans-serif",fontSize:26,color:"#E6EDF3",letterSpacing:1},
-  th:{textAlign:"left",padding:"10px 16px",fontSize:11,fontWeight:600,color:"#8B949E",textTransform:"uppercase",letterSpacing:"0.06em",borderBottom:"1px solid #21262D"},
-  td:{padding:"12px 16px",borderBottom:"1px solid #1c2128",color:"#C9D1D9",verticalAlign:"middle"},
+const DISTRICTS=["Paramaribo","Wanica","Commewijne","Nickerie","Saramacca","Coronie","Marowijne","Para","Brokopondo","Sipaliwini"];
+const DIENST=["standaard","express","same_day"];
+
+const S={
+  btn:{background:"#f01e2c",color:"#fff",border:"none",borderRadius:2,padding:"9px 16px",fontSize:13,fontWeight:600,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:6,fontFamily:"'DM Sans',sans-serif"},
+  btnSm:{background:"#f01e2c",color:"#fff",border:"none",borderRadius:2,padding:"5px 10px",fontSize:11,fontWeight:600,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:4,fontFamily:"'DM Sans',sans-serif"},
+  btnGhost:{background:"transparent",color:"#8B949E",border:"1px solid #30363D",borderRadius:2,padding:"7px 12px",fontSize:12,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"},
+  inp:{background:"#0D1117",border:"1px solid #30363D",borderRadius:2,color:"#E6EDF3",padding:"9px 11px",fontSize:13,width:"100%",outline:"none"},
+  sel:{background:"#0D1117",border:"1px solid #30363D",borderRadius:2,color:"#E6EDF3",padding:"9px 11px",fontSize:13,width:"100%",outline:"none"},
+  lbl:{fontSize:10,color:"#8B949E",textTransform:"uppercase",letterSpacing:"0.07em",fontWeight:600,marginBottom:5,display:"block"},
+  card:{background:"#161B22",border:"1px solid #21262D",borderRadius:2,padding:14},
+  tw:{background:"#161B22",border:"1px solid #21262D",borderRadius:2,overflow:"hidden",overflowX:"auto",WebkitOverflowScrolling:"touch"},
+  th:{textAlign:"left",padding:"9px 12px",fontSize:10,fontWeight:700,color:"#8B949E",textTransform:"uppercase",letterSpacing:"0.07em",borderBottom:"1px solid #21262D",whiteSpace:"nowrap"},
+  td:{padding:"10px 12px",borderBottom:"1px solid #1c2128",color:"#C9D1D9",verticalAlign:"middle",fontSize:13},
 };
 
-function NavItem({icon,label,active,badge,onClick}){
-  return <div onClick={onClick} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderRadius:2,fontSize:13,cursor:"pointer",color:active?"#f01e2c":"#8B949E",background:active?"#2a0408":"transparent",borderLeft:active?"2px solid #f01e2c":"2px solid transparent"}}>
-    <span style={{fontSize:15}}>{icon}</span>
-    <span>{label}</span>
-    {badge>0&&<span style={{marginLeft:"auto",background:"#f01e2c",color:"#fff",fontSize:10,fontWeight:600,padding:"1px 6px",borderRadius:2}}>{badge}</span>}
-  </div>
-}
+function Fld({l,ch}){return <div style={{marginBottom:13}}><label style={S.lbl}>{l}</label>{ch}</div>}
 
-function Badge({status}){
-  const m=STATUS[status]||STATUS.in_behandeling;
-  return <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 8px",borderRadius:2,fontSize:11,fontWeight:600,background:m.bg,color:m.color}}>
-    <span style={{width:6,height:6,borderRadius:"50%",background:m.color,display:"inline-block"}}/>
-    {m.label}
+function Bdg({status,short}){
+  const m=ZSTATUS[status]||ZSTATUS.aangemaakt;
+  return <span style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 7px",borderRadius:2,fontSize:10,fontWeight:700,background:m.bg,color:m.c,whiteSpace:"nowrap"}}>
+    <span style={{width:5,height:5,borderRadius:"50%",background:m.c,flexShrink:0,display:"inline-block"}}/>
+    {short?m.s:m.l}
   </span>
 }
 
 function Modal({title,onClose,children}){
-  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.75)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:100}}>
-    <div style={{background:"#161B22",border:"1px solid #21262D",borderRadius:2,padding:24,width:520,maxHeight:"90vh",overflowY:"auto"}}>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20}}>
-        <div style={S.pageTitle}>{title}</div>
-        <button onClick={onClose} style={S.btnGhost}>✕ Sluiten</button>
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.82)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:300}} onClick={e=>{if(e.target===e.currentTarget)onClose()}}>
+    <div className="modal-box" style={{background:"#161B22",border:"1px solid #21262D",borderRadius:"4px 4px 0 0",padding:20,width:560,maxHeight:"90vh",overflowY:"auto"}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
+        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:22,letterSpacing:1}}>{title}</div>
+        <button onClick={onClose} style={S.btnGhost}>✕</button>
       </div>
       {children}
     </div>
   </div>
 }
 
-function Field({label,children}){
-  return <div style={{marginBottom:14}}>
-    <label style={S.label}>{label}</label>
-    {children}
-  </div>
-}
-
 // ── DASHBOARD ────────────────────────────────────────────────────────────────
-function Dashboard({orders,klanten}){
-  const actief=orders.filter(o=>o.status!=="afgeleverd"&&o.status!=="geannuleerd").length;
-  const onderweg=orders.filter(o=>o.status==="onderweg").length;
-  const vandaag=orders.filter(o=>{const d=new Date(o.aangemaakt_op),n=new Date();return d.toDateString()===n.toDateString()&&o.status==="afgeleverd";}).length;
-  const vertraging=orders.filter(o=>o.status==="vertraging").length;
-  const recent=[...orders].sort((a,b)=>new Date(b.aangemaakt_op)-new Date(a.aangemaakt_op)).slice(0,6);
+function Dashboard({zendingen,chauffeurs,klanten}){
+  const actief=zendingen.filter(z=>!["afgeleverd","voltooid","mislukt"].includes(z.status)).length;
+  const onderweg=zendingen.filter(z=>z.status==="onderweg").length;
+  const vandaag=zendingen.filter(z=>z.status==="afgeleverd"&&new Date(z.bijgewerkt_op).toDateString()===new Date().toDateString()).length;
+  const mislukt=zendingen.filter(z=>z.status==="mislukt").length;
+  const cod_open=zendingen.filter(z=>z.cod_bedrag>0&&!z.cod_ontvangen).length;
+  const recent=[...zendingen].sort((a,b)=>new Date(b.aangemaakt_op)-new Date(a.aangemaakt_op)).slice(0,6);
 
-  return <div style={{display:"flex",flexDirection:"column",gap:20}}>
+  return <div style={{display:"flex",flexDirection:"column",gap:16}}>
     <div>
-      <div style={S.pageTitle}>Dashboard</div>
-      <div style={{fontSize:13,color:"#8B949E",marginTop:2}}>{new Date().toLocaleDateString("nl-NL",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}</div>
+      <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:26,letterSpacing:1}}>Dashboard</div>
+      <div style={{fontSize:12,color:"#8B949E",marginTop:2}}>{new Date().toLocaleDateString("nl-NL",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}</div>
     </div>
 
-    <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12}}>
+    <div className="stats-grid" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
       {[
-        {label:"Actieve orders",value:actief,color:"#E6EDF3"},
-        {label:"Onderweg",value:onderweg,color:"#58A6FF"},
-        {label:"Afgeleverd vandaag",value:vandaag,color:"#3FB950"},
-        {label:"Vertraging",value:vertraging,color:vertraging>0?"#f01e2c":"#E6EDF3"},
-      ].map(s=><div key={s.label} style={S.statCard}>
-        <div style={{fontSize:11,color:"#8B949E",fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em"}}>{s.label}</div>
-        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:40,color:s.color,marginTop:4,lineHeight:1}}>{s.value}</div>
+        {l:"Actieve zendingen",v:actief,c:"#E6EDF3"},
+        {l:"Onderweg",v:onderweg,c:"#58A6FF"},
+        {l:"Afgelev. vandaag",v:vandaag,c:"#3FB950"},
+        {l:"COD open",v:cod_open,c:cod_open>0?"#D29922":"#E6EDF3"},
+      ].map(s=><div key={s.l} style={{background:"#161B22",border:"1px solid #21262D",borderTop:"2px solid #f01e2c",borderRadius:2,padding:"12px 10px"}}>
+        <div style={{fontSize:10,color:"#8B949E",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.05em",lineHeight:1.3}}>{s.l}</div>
+        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:36,color:s.c,lineHeight:1,marginTop:4}}>{s.v}</div>
+      </div>)}
+    </div>
+
+    <div className="stats-grid" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
+      {[
+        {l:"Totaal zendingen",v:zendingen.length,c:"#E6EDF3"},
+        {l:"Chauffeurs actief",v:chauffeurs.filter(c=>c.actief).length,c:"#BC8CFF"},
+        {l:"Klanten",v:klanten.length,c:"#58A6FF"},
+        {l:"Mislukt",v:mislukt,c:mislukt>0?"#f01e2c":"#8B949E"},
+      ].map(s=><div key={s.l} style={{background:"#161B22",border:"1px solid #21262D",borderRadius:2,padding:"10px 10px"}}>
+        <div style={{fontSize:10,color:"#8B949E",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.05em",lineHeight:1.3}}>{s.l}</div>
+        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:28,color:s.c,lineHeight:1,marginTop:3}}>{s.v}</div>
       </div>)}
     </div>
 
     <div>
-      <div style={{fontSize:14,fontWeight:600,marginBottom:12}}>Recente orders</div>
-      <div style={S.tableWrap}>
-        <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+      <div style={{fontSize:13,fontWeight:600,marginBottom:10}}>Recente zendingen</div>
+      <div style={S.tw}>
+        <table style={{width:"100%",borderCollapse:"collapse",minWidth:380}}>
           <thead style={{background:"#0D1117"}}>
-            <tr>{["Order #","Klant","Bestemming","Datum","Status"].map(h=><th key={h} style={S.th}>{h}</th>)}</tr>
+            <tr>
+              <th style={S.th}>Code</th>
+              <th style={S.th}>Ontvanger</th>
+              <th style={S.th} className="hide-mob">District</th>
+              <th style={S.th} className="hide-mob">Chauffeur</th>
+              <th style={S.th}>Status</th>
+            </tr>
           </thead>
           <tbody>
-            {recent.length===0&&<tr><td colSpan={5} style={{...S.td,color:"#8B949E",textAlign:"center",padding:32}}>Nog geen orders — maak je eerste order aan via de Orders pagina</td></tr>}
-            {recent.map(o=>{
-              const k=klanten.find(k=>k.id===o.klant_id);
-              return <tr key={o.id}>
-                <td style={{...S.td,color:"#f01e2c",fontFamily:"'Bebas Neue',sans-serif",fontSize:16,fontWeight:600}}>#{o.order_nummer}</td>
-                <td style={S.td}>{k?.bedrijfsnaam||"—"}</td>
-                <td style={S.td}>{o.bestemming}</td>
-                <td style={{...S.td,color:"#8B949E"}}>{fmtDate(o.aangemaakt_op)}</td>
-                <td style={S.td}><Badge status={o.status}/></td>
+            {recent.length===0&&<tr><td colSpan={5} style={{...S.td,textAlign:"center",color:"#8B949E",padding:28}}>Nog geen zendingen</td></tr>}
+            {recent.map(z=>{
+              const ch=chauffeurs.find(c=>c.id===z.chauffeur_id);
+              return <tr key={z.id}>
+                <td style={{...S.td,color:"#f01e2c",fontFamily:"'Bebas Neue',sans-serif",fontSize:14,whiteSpace:"nowrap"}}>{z.zending_code}</td>
+                <td style={{...S.td,maxWidth:110,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{z.ontvanger_naam||"—"}</td>
+                <td style={{...S.td,color:"#8B949E"}} className="hide-mob">{z.district||"—"}</td>
+                <td style={{...S.td,color:"#8B949E"}} className="hide-mob">{ch?.naam||"—"}</td>
+                <td style={S.td}><Bdg status={z.status} short/></td>
               </tr>
             })}
           </tbody>
@@ -151,38 +167,35 @@ function Dashboard({orders,klanten}){
       </div>
     </div>
 
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+    <div className="two-col" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
       <div style={S.card}>
-        <div style={{fontSize:14,fontWeight:600,marginBottom:12}}>Top klanten</div>
-        {klanten.length===0&&<div style={{color:"#8B949E",fontSize:13}}>Nog geen klanten</div>}
-        {klanten.slice(0,5).map(k=>{
-          const cnt=orders.filter(o=>o.klant_id===k.id).length;
-          return <div key={k.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"9px 0",borderBottom:"1px solid #21262D",fontSize:13}}>
-            <div style={{display:"flex",alignItems:"center",gap:10}}>
-              <div style={{width:30,height:30,borderRadius:2,background:"#2a0408",color:"#f01e2c",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,flexShrink:0}}>
-                {k.bedrijfsnaam.slice(0,2).toUpperCase()}
-              </div>
-              <div>
-                <div style={{fontWeight:500,color:"#E6EDF3"}}>{k.bedrijfsnaam}</div>
-                <div style={{fontSize:11,color:"#8B949E"}}>{cnt} orders</div>
-              </div>
+        <div style={{fontSize:13,fontWeight:600,marginBottom:10}}>Status verdeling</div>
+        {Object.entries(ZSTATUS).map(([k,m])=>{
+          const cnt=zendingen.filter(z=>z.status===k).length;
+          const pct=zendingen.length>0?Math.round((cnt/zendingen.length)*100):0;
+          return <div key={k} style={{marginBottom:7}}>
+            <div style={{display:"flex",justifyContent:"space-between",fontSize:11,marginBottom:2}}>
+              <span style={{color:m.c}}>{m.s}</span>
+              <span style={{color:"#8B949E"}}>{cnt}</span>
+            </div>
+            <div style={{height:3,background:"#21262D",borderRadius:2}}>
+              <div style={{height:3,width:`${pct}%`,background:m.c,borderRadius:2}}/>
             </div>
           </div>
         })}
       </div>
       <div style={S.card}>
-        <div style={{fontSize:14,fontWeight:600,marginBottom:12}}>Status verdeling</div>
-        {Object.entries(STATUS).map(([key,meta])=>{
-          const cnt=orders.filter(o=>o.status===key).length;
-          const pct=orders.length>0?Math.round((cnt/orders.length)*100):0;
-          return <div key={key} style={{marginBottom:10}}>
-            <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}>
-              <span style={{color:meta.color}}>{meta.label}</span>
-              <span style={{color:"#8B949E"}}>{cnt}</span>
+        <div style={{fontSize:13,fontWeight:600,marginBottom:10}}>Chauffeurs</div>
+        {chauffeurs.length===0&&<div style={{color:"#8B949E",fontSize:12}}>Nog geen chauffeurs</div>}
+        {chauffeurs.map(c=>{
+          const cnt=zendingen.filter(z=>z.chauffeur_id===c.id&&["onderweg","naar_ophaling","opgehaald"].includes(z.status)).length;
+          return <div key={c.id} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 0",borderBottom:"1px solid #21262D"}}>
+            <div style={{width:8,height:8,borderRadius:"50%",background:c.actief?"#3FB950":"#484F58",flexShrink:0}}/>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:13,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.naam}</div>
+              <div style={{fontSize:11,color:"#8B949E"}}>{c.voertuig||"—"} · {c.kenteken||"—"}</div>
             </div>
-            <div style={{height:4,background:"#21262D",borderRadius:2}}>
-              <div style={{height:4,width:`${pct}%`,background:meta.color,borderRadius:2}}/>
-            </div>
+            <span style={{background:"#2a0408",color:"#f01e2c",fontSize:11,fontWeight:600,padding:"2px 7px",borderRadius:2}}>{cnt} actief</span>
           </div>
         })}
       </div>
@@ -190,146 +203,271 @@ function Dashboard({orders,klanten}){
   </div>
 }
 
-// ── ORDERS ───────────────────────────────────────────────────────────────────
-function Orders({orders,klanten,onRefresh}){
+// ── ZENDINGEN ────────────────────────────────────────────────────────────────
+function Zendingen({zendingen,chauffeurs,klanten,onRefresh}){
   const [filter,setFilter]=React.useState("alle");
   const [search,setSearch]=React.useState("");
-  const [showModal,setShowModal]=React.useState(false);
+  const [showNew,setShowNew]=React.useState(false);
   const [detail,setDetail]=React.useState(null);
-  const [form,setForm]=React.useState({klant_id:"",bestemming:"",omschrijving:"",gewicht_kg:"",aantal_colli:"",leverdatum:"",notities:"",status:"in_behandeling"});
   const [saving,setSaving]=React.useState(false);
   const [err,setErr]=React.useState("");
+  const [form,setForm]=React.useState({
+    klant_id:"",ontvanger_naam:"",ontvanger_tel:"",ontvanger_email:"",
+    ophaaladres:"",afleveradres:"",district:"Paramaribo",
+    pakkettype:"",gewicht_kg:"",diensttype:"standaard",
+    cod_bedrag:"",chauffeur_id:"",notities:""
+  });
 
-  const filtered=orders.filter(o=>{
-    const k=klanten.find(k=>k.id===o.klant_id);
-    const mf=filter==="alle"||o.status===filter;
-    const ms=!search||o.bestemming?.toLowerCase().includes(search.toLowerCase())||k?.bedrijfsnaam?.toLowerCase().includes(search.toLowerCase())||String(o.order_nummer).includes(search);
+  const filtered=zendingen.filter(z=>{
+    const mf=filter==="alle"||z.status===filter;
+    const ms=!search||z.zending_code?.toLowerCase().includes(search.toLowerCase())||z.ontvanger_naam?.toLowerCase().includes(search.toLowerCase())||z.afleveradres?.toLowerCase().includes(search.toLowerCase())||z.district?.toLowerCase().includes(search.toLowerCase());
     return mf&&ms;
   });
 
-  async function saveOrder(){
-    if(!form.bestemming){setErr("Bestemming is verplicht");return;}
+  async function save(){
+    if(!form.afleveradres){setErr("Afleveradres is verplicht");return;}
     setSaving(true);setErr("");
     try{
-      await db("/orders",{method:"POST",headers:{Prefer:"return=minimal"},body:JSON.stringify({...form,gewicht_kg:form.gewicht_kg||null,aantal_colli:form.aantal_colli||null,leverdatum:form.leverdatum||null})});
-      setShowModal(false);
-      setForm({klant_id:"",bestemming:"",omschrijving:"",gewicht_kg:"",aantal_colli:"",leverdatum:"",notities:"",status:"in_behandeling"});
+      await db("/zendingen",{method:"POST",headers:{Prefer:"return=minimal"},body:JSON.stringify({
+        ...form,
+        gewicht_kg:form.gewicht_kg||null,
+        cod_bedrag:parseFloat(form.cod_bedrag)||0,
+        klant_id:form.klant_id||null,
+        chauffeur_id:form.chauffeur_id||null,
+        zending_code:""
+      })});
+      setShowNew(false);
+      setForm({klant_id:"",ontvanger_naam:"",ontvanger_tel:"",ontvanger_email:"",ophaaladres:"",afleveradres:"",district:"Paramaribo",pakkettype:"",gewicht_kg:"",diensttype:"standaard",cod_bedrag:"",chauffeur_id:"",notities:""});
       onRefresh();
     }catch(e){setErr(e.message);}
     setSaving(false);
   }
 
   async function updateStatus(id,status){
-    await db(`/orders?id=eq.${id}`,{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({status})});
+    await db(`/zendingen?id=eq.${id}`,{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({status})});
+    // log it
+    await db("/status_logs",{method:"POST",headers:{Prefer:"return=minimal"},body:JSON.stringify({zending_id:id,status})});
     onRefresh();
     if(detail?.id===id)setDetail(d=>({...d,status}));
   }
 
-  async function deleteOrder(id){
-    if(!confirm("Order verwijderen?"))return;
-    await db(`/orders?id=eq.${id}`,{method:"DELETE"});
+  async function assignDriver(id,chauffeur_id){
+    await db(`/zendingen?id=eq.${id}`,{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({chauffeur_id,status:"toegewezen"})});
+    await db("/status_logs",{method:"POST",headers:{Prefer:"return=minimal"},body:JSON.stringify({zending_id:id,status:"toegewezen"})});
+    onRefresh();
+    if(detail?.id===id)setDetail(d=>({...d,chauffeur_id,status:"toegewezen"}));
+  }
+
+  async function del(id){
+    if(!confirm("Zending verwijderen?"))return;
+    await db(`/zendingen?id=eq.${id}`,{method:"DELETE"});
     onRefresh();setDetail(null);
   }
 
-  return <div style={{display:"flex",flexDirection:"column",gap:16}}>
-    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-      <div style={S.pageTitle}>Orders</div>
-      <button style={S.btn} onClick={()=>setShowModal(true)}>+ Nieuwe order</button>
+  return <div style={{display:"flex",flexDirection:"column",gap:14}}>
+    <div className="page-head" style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+      <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:26,letterSpacing:1}}>Zendingen</div>
+      <button style={S.btn} onClick={()=>setShowNew(true)}>+ Nieuwe zending</button>
     </div>
 
-    <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-      <input style={{...S.input,maxWidth:260}} placeholder="Zoeken op klant, bestemming, order#..." value={search} onChange={e=>setSearch(e.target.value)}/>
-      <div style={{display:"flex",gap:3,background:"#0D1117",padding:3,borderRadius:2,flexWrap:"wrap"}}>
-        {["alle",...Object.keys(STATUS)].map(s=><button key={s} onClick={()=>setFilter(s)} style={{padding:"5px 10px",borderRadius:2,fontSize:11,cursor:"pointer",border:"none",fontFamily:"'DM Sans',sans-serif",background:filter===s?"#161B22":"transparent",color:filter===s?"#f01e2c":"#8B949E",fontWeight:filter===s?600:400}}>
-          {s==="alle"?"Alle":STATUS[s].label}
-        </button>)}
-      </div>
+    <input style={S.inp} placeholder="Zoek op code, ontvanger, adres, district..." value={search} onChange={e=>setSearch(e.target.value)}/>
+
+    <div style={{display:"flex",gap:3,background:"#0D1117",padding:3,borderRadius:2,overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
+      {["alle",...Object.keys(ZSTATUS)].map(s=><button key={s} onClick={()=>setFilter(s)} style={{padding:"5px 9px",borderRadius:2,fontSize:10,cursor:"pointer",border:"none",fontFamily:"'DM Sans',sans-serif",background:filter===s?"#161B22":"transparent",color:filter===s?"#f01e2c":"#8B949E",fontWeight:filter===s?700:400,whiteSpace:"nowrap",flexShrink:0}}>
+        {s==="alle"?"Alle":ZSTATUS[s].s}
+      </button>)}
     </div>
 
-    <div style={S.tableWrap}>
-      <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+    <div style={S.tw}>
+      <table style={{width:"100%",borderCollapse:"collapse",minWidth:360}}>
         <thead style={{background:"#0D1117"}}>
-          <tr>{["Order #","Klant","Bestemming","Leverdatum","Gewicht","Status",""].map(h=><th key={h} style={S.th}>{h}</th>)}</tr>
+          <tr>
+            <th style={S.th}>Code</th>
+            <th style={S.th}>Ontvanger</th>
+            <th style={S.th} className="hide-mob">District</th>
+            <th style={S.th} className="hide-mob">Chauffeur</th>
+            <th style={S.th} className="hide-mob">COD</th>
+            <th style={S.th}>Status</th>
+            <th style={S.th}></th>
+          </tr>
         </thead>
         <tbody>
-          {filtered.length===0&&<tr><td colSpan={7} style={{...S.td,color:"#8B949E",textAlign:"center",padding:32}}>Geen orders gevonden</td></tr>}
-          {filtered.map(o=>{
-            const k=klanten.find(k=>k.id===o.klant_id);
-            return <tr key={o.id} style={{cursor:"pointer"}} onClick={()=>setDetail(o)}>
-              <td style={{...S.td,color:"#f01e2c",fontFamily:"'Bebas Neue',sans-serif",fontSize:16}}>#{o.order_nummer}</td>
-              <td style={S.td}>{k?.bedrijfsnaam||"—"}</td>
-              <td style={S.td}>{o.bestemming}</td>
-              <td style={{...S.td,color:"#8B949E"}}>{fmtDate(o.leverdatum)}</td>
-              <td style={{...S.td,color:"#8B949E"}}>{o.gewicht_kg?`${o.gewicht_kg} kg`:"—"}</td>
-              <td style={S.td}><Badge status={o.status}/></td>
-              <td style={S.td} onClick={e=>e.stopPropagation()}>
-                <button style={S.btnGhost} onClick={()=>deleteOrder(o.id)}>✕</button>
-              </td>
+          {filtered.length===0&&<tr><td colSpan={7} style={{...S.td,textAlign:"center",color:"#8B949E",padding:28}}>Geen zendingen gevonden</td></tr>}
+          {filtered.map(z=>{
+            const ch=chauffeurs.find(c=>c.id===z.chauffeur_id);
+            return <tr key={z.id} style={{cursor:"pointer"}} onClick={()=>setDetail(z)}>
+              <td style={{...S.td,color:"#f01e2c",fontFamily:"'Bebas Neue',sans-serif",fontSize:14,whiteSpace:"nowrap"}}>{z.zending_code}</td>
+              <td style={{...S.td,maxWidth:100,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{z.ontvanger_naam||"—"}</td>
+              <td style={{...S.td,color:"#8B949E"}} className="hide-mob">{z.district||"—"}</td>
+              <td style={{...S.td,color:"#8B949E"}} className="hide-mob">{ch?.naam||<span style={{color:"#f01e2c",fontSize:11}}>⚠ Geen</span>}</td>
+              <td style={S.td} className="hide-mob">{z.cod_bedrag>0?<span style={{color:"#D29922",fontWeight:600}}>SRD {z.cod_bedrag}</span>:"—"}</td>
+              <td style={S.td}><Bdg status={z.status} short/></td>
+              <td style={S.td} onClick={e=>e.stopPropagation()}><button style={{...S.btnGhost,padding:"3px 8px"}} onClick={()=>del(z.id)}>✕</button></td>
             </tr>
           })}
         </tbody>
       </table>
     </div>
 
-    {showModal&&<Modal title="Nieuwe order" onClose={()=>setShowModal(false)}>
-      <Field label="Klant">
-        <select style={S.select} value={form.klant_id} onChange={e=>setForm(f=>({...f,klant_id:e.target.value}))}>
-          <option value="">Selecteer klant...</option>
-          {klanten.map(k=><option key={k.id} value={k.id}>{k.bedrijfsnaam}</option>)}
-        </select>
-      </Field>
-      <Field label="Bestemming *"><input style={S.input} value={form.bestemming} onChange={e=>setForm(f=>({...f,bestemming:e.target.value}))} placeholder="Stad of adres"/></Field>
-      <Field label="Omschrijving"><input style={S.input} value={form.omschrijving} onChange={e=>setForm(f=>({...f,omschrijving:e.target.value}))} placeholder="Wat wordt er vervoerd?"/></Field>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-        <Field label="Gewicht (kg)"><input style={S.input} type="number" value={form.gewicht_kg} onChange={e=>setForm(f=>({...f,gewicht_kg:e.target.value}))}/></Field>
-        <Field label="Aantal colli"><input style={S.input} type="number" value={form.aantal_colli} onChange={e=>setForm(f=>({...f,aantal_colli:e.target.value}))}/></Field>
+    {showNew&&<Modal title="Nieuwe zending" onClose={()=>setShowNew(false)}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <Fld l="Klant (optioneel)" ch={<select style={S.sel} value={form.klant_id} onChange={e=>setForm(f=>({...f,klant_id:e.target.value}))}><option value="">Selecteer...</option>{klanten.map(k=><option key={k.id} value={k.id}>{k.bedrijfsnaam}</option>)}</select>}/>
+        <Fld l="Diensttype" ch={<select style={S.sel} value={form.diensttype} onChange={e=>setForm(f=>({...f,diensttype:e.target.value}))}>{DIENST.map(d=><option key={d} value={d}>{d.replace("_"," ")}</option>)}</select>}/>
       </div>
-      <Field label="Leverdatum"><input style={S.input} type="date" value={form.leverdatum} onChange={e=>setForm(f=>({...f,leverdatum:e.target.value}))}/></Field>
-      <Field label="Status">
-        <select style={S.select} value={form.status} onChange={e=>setForm(f=>({...f,status:e.target.value}))}>
-          {Object.entries(STATUS).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
-        </select>
-      </Field>
-      <Field label="Notities"><textarea style={{...S.input,height:80,resize:"vertical"}} value={form.notities} onChange={e=>setForm(f=>({...f,notities:e.target.value}))}/></Field>
-      {err&&<div style={{color:"#f01e2c",fontSize:12,marginBottom:12}}>{err}</div>}
+      <Fld l="Naam ontvanger" ch={<input style={S.inp} value={form.ontvanger_naam} onChange={e=>setForm(f=>({...f,ontvanger_naam:e.target.value}))} placeholder="Volledige naam"/>}/>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <Fld l="Telefoon ontvanger" ch={<input style={S.inp} value={form.ontvanger_tel} onChange={e=>setForm(f=>({...f,ontvanger_tel:e.target.value}))}/>}/>
+        <Fld l="District" ch={<select style={S.sel} value={form.district} onChange={e=>setForm(f=>({...f,district:e.target.value}))}>{DISTRICTS.map(d=><option key={d} value={d}>{d}</option>)}</select>}/>
+      </div>
+      <Fld l="Ophaaladres" ch={<input style={S.inp} value={form.ophaaladres} onChange={e=>setForm(f=>({...f,ophaaladres:e.target.value}))} placeholder="Adres van afhalen"/>}/>
+      <Fld l="Afleveradres *" ch={<input style={S.inp} value={form.afleveradres} onChange={e=>setForm(f=>({...f,afleveradres:e.target.value}))} placeholder="Adres van bezorgen"/>}/>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+        <Fld l="Pakkettype" ch={<input style={S.inp} value={form.pakkettype} onChange={e=>setForm(f=>({...f,pakkettype:e.target.value}))} placeholder="Doos, tas..."/>}/>
+        <Fld l="Gewicht (kg)" ch={<input style={S.inp} type="number" value={form.gewicht_kg} onChange={e=>setForm(f=>({...f,gewicht_kg:e.target.value}))}/>}/>
+        <Fld l="COD bedrag (SRD)" ch={<input style={S.inp} type="number" value={form.cod_bedrag} onChange={e=>setForm(f=>({...f,cod_bedrag:e.target.value}))} placeholder="0"/>}/>
+      </div>
+      <Fld l="Chauffeur" ch={<select style={S.sel} value={form.chauffeur_id} onChange={e=>setForm(f=>({...f,chauffeur_id:e.target.value}))}><option value="">Later toewijzen</option>{chauffeurs.filter(c=>c.actief).map(c=><option key={c.id} value={c.id}>{c.naam} — {c.voertuig||"?"}</option>)}</select>}/>
+      <Fld l="Notities" ch={<textarea style={{...S.inp,height:60,resize:"vertical"}} value={form.notities} onChange={e=>setForm(f=>({...f,notities:e.target.value}))}/>}/>
+      {err&&<div style={{color:"#f01e2c",fontSize:12,marginBottom:10}}>{err}</div>}
       <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
-        <button style={S.btnGhost} onClick={()=>setShowModal(false)}>Annuleren</button>
-        <button style={S.btn} onClick={saveOrder} disabled={saving}>{saving?"Opslaan...":"Order aanmaken"}</button>
+        <button style={S.btnGhost} onClick={()=>setShowNew(false)}>Annuleren</button>
+        <button style={S.btn} onClick={save} disabled={saving}>{saving?"Opslaan...":"Aanmaken"}</button>
       </div>
     </Modal>}
 
-    {detail&&<Modal title={`Order #${detail.order_nummer}`} onClose={()=>setDetail(null)}>
-      {[
-        ["Klant",klanten.find(k=>k.id===detail.klant_id)?.bedrijfsnaam||"—"],
-        ["Bestemming",detail.bestemming],
-        ["Omschrijving",detail.omschrijving||"—"],
-        ["Gewicht",detail.gewicht_kg?`${detail.gewicht_kg} kg`:"—"],
-        ["Aantal colli",detail.aantal_colli||"—"],
-        ["Leverdatum",fmtDate(detail.leverdatum)],
-        ["Aangemaakt op",fmtDate(detail.aangemaakt_op)],
-        ["Notities",detail.notities||"—"],
-      ].map(([k,v])=><div key={k} style={{display:"flex",padding:"9px 0",borderBottom:"1px solid #21262D",fontSize:13}}>
-        <span style={{color:"#8B949E",width:140,flexShrink:0}}>{k}</span>
-        <span style={{color:"#E6EDF3"}}>{v}</span>
-      </div>)}
-      <div style={{marginTop:16}}>
-        <label style={S.label}>Status wijzigen</label>
-        <div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:6}}>
-          {Object.entries(STATUS).map(([key,meta])=><button key={key} onClick={()=>updateStatus(detail.id,key)} style={{padding:"6px 14px",borderRadius:2,fontSize:12,cursor:"pointer",border:`1px solid ${detail.status===key?meta.color:"#30363D"}`,background:detail.status===key?meta.bg:"transparent",color:detail.status===key?meta.color:"#8B949E",fontFamily:"'DM Sans',sans-serif"}}>
-            {meta.label}
+    {detail&&<Modal title={detail.zending_code} onClose={()=>setDetail(null)}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:14}}>
+        {[
+          ["Ontvanger",detail.ontvanger_naam||"—"],
+          ["Telefoon",detail.ontvanger_tel||"—"],
+          ["District",detail.district||"—"],
+          ["Diensttype",detail.diensttype||"—"],
+          ["Ophaaladres",detail.ophaaladres||"—"],
+          ["Afleveradres",detail.afleveradres],
+          ["Pakket",detail.pakkettype||"—"],
+          ["Gewicht",detail.gewicht_kg?`${detail.gewicht_kg} kg`:"—"],
+          ["COD",detail.cod_bedrag>0?`SRD ${detail.cod_bedrag}`:"—"],
+          ["COD ontvangen",detail.cod_ontvangen?"Ja":"Nee"],
+          ["Aangemaakt",fd(detail.aangemaakt_op)],
+          ["Notities",detail.notities||"—"],
+        ].map(([k,v])=><div key={k} style={{background:"#0D1117",borderRadius:2,padding:"7px 10px"}}>
+          <div style={{fontSize:10,color:"#8B949E",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>{k}</div>
+          <div style={{fontSize:13,color:"#E6EDF3"}}>{v}</div>
+        </div>)}
+      </div>
+
+      <div style={{marginBottom:14}}>
+        <label style={S.lbl}>Chauffeur toewijzen</label>
+        <div style={{display:"flex",gap:8}}>
+          <select style={{...S.sel,flex:1}} defaultValue={detail.chauffeur_id||""} id="ch-sel">
+            <option value="">Geen chauffeur</option>
+            {chauffeurs.filter(c=>c.actief).map(c=><option key={c.id} value={c.id}>{c.naam} — {c.voertuig||"?"}</option>)}
+          </select>
+          <button style={S.btn} onClick={()=>{const v=document.getElementById("ch-sel").value;assignDriver(detail.id,v||null);}}>Toewijzen</button>
+        </div>
+      </div>
+
+      <div>
+        <label style={S.lbl}>Status wijzigen</label>
+        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:4}}>
+          {Object.entries(ZSTATUS).map(([k,m])=><button key={k} onClick={()=>updateStatus(detail.id,k)} style={{padding:"6px 10px",borderRadius:2,fontSize:11,cursor:"pointer",border:`1px solid ${detail.status===k?m.c:"#30363D"}`,background:detail.status===k?m.bg:"transparent",color:detail.status===k?m.c:"#8B949E",fontFamily:"'DM Sans',sans-serif",fontWeight:600}}>
+            {m.l}
           </button>)}
         </div>
       </div>
-      <div style={{display:"flex",justifyContent:"flex-end",marginTop:20}}>
-        <button style={{...S.btnGhost,color:"#f01e2c",borderColor:"#f01e2c"}} onClick={()=>deleteOrder(detail.id)}>Order verwijderen</button>
+      <div style={{display:"flex",justifyContent:"flex-end",marginTop:14}}>
+        <button style={{...S.btnGhost,color:"#f01e2c",borderColor:"#f01e2c"}} onClick={()=>del(detail.id)}>Verwijderen</button>
       </div>
     </Modal>}
   </div>
 }
 
-// ── KLANTEN ──────────────────────────────────────────────────────────────────
-function Klanten({klanten,orders,onRefresh}){
-  const [showModal,setShowModal]=React.useState(false);
+// ── CHAUFFEURS ────────────────────────────────────────────────────────────────
+function Chauffeurs({chauffeurs,zendingen,onRefresh}){
+  const [showNew,setShowNew]=React.useState(false);
+  const [form,setForm]=React.useState({naam:"",telefoon:"",email:"",kenteken:"",voertuig:"",actief:true});
+  const [saving,setSaving]=React.useState(false);
+  const [err,setErr]=React.useState("");
+
+  async function save(){
+    if(!form.naam){setErr("Naam is verplicht");return;}
+    setSaving(true);setErr("");
+    try{
+      await db("/chauffeurs",{method:"POST",headers:{Prefer:"return=minimal"},body:JSON.stringify(form)});
+      setShowNew(false);setForm({naam:"",telefoon:"",email:"",kenteken:"",voertuig:"",actief:true});onRefresh();
+    }catch(e){setErr(e.message);}
+    setSaving(false);
+  }
+
+  async function toggle(id,actief){
+    await db(`/chauffeurs?id=eq.${id}`,{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({actief})});
+    onRefresh();
+  }
+
+  async function del(id){
+    if(!confirm("Chauffeur verwijderen?"))return;
+    await db(`/chauffeurs?id=eq.${id}`,{method:"DELETE"});onRefresh();
+  }
+
+  return <div style={{display:"flex",flexDirection:"column",gap:14}}>
+    <div className="page-head" style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+      <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:26,letterSpacing:1}}>Chauffeurs</div>
+      <button style={S.btn} onClick={()=>setShowNew(true)}>+ Nieuwe chauffeur</button>
+    </div>
+
+    <div style={{display:"flex",flexDirection:"column",gap:8}}>
+      {chauffeurs.length===0&&<div style={{...S.card,color:"#8B949E",textAlign:"center",padding:28,fontSize:13}}>Nog geen chauffeurs toegevoegd</div>}
+      {chauffeurs.map(c=>{
+        const actief_z=zendingen.filter(z=>z.chauffeur_id===c.id&&["onderweg","naar_ophaling","opgehaald","geaccepteerd"].includes(z.status)).length;
+        const totaal_z=zendingen.filter(z=>z.chauffeur_id===c.id).length;
+        return <div key={c.id} style={{...S.card,display:"flex",alignItems:"center",gap:12}}>
+          <div style={{width:44,height:44,borderRadius:2,background:c.actief?"#112D24":"#21262D",color:c.actief?"#3FB950":"#484F58",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:700,flexShrink:0}}>
+            {c.naam.slice(0,2).toUpperCase()}
+          </div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <div style={{fontWeight:600,fontSize:14,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.naam}</div>
+              <span style={{fontSize:10,fontWeight:700,padding:"2px 6px",borderRadius:2,background:c.actief?"#112D24":"#21262D",color:c.actief?"#3FB950":"#484F58"}}>{c.actief?"ACTIEF":"INACTIEF"}</span>
+            </div>
+            <div style={{fontSize:12,color:"#8B949E",marginTop:2}}>{[c.voertuig,c.kenteken].filter(Boolean).join(" · ")||"Geen voertuig"}</div>
+            <div style={{fontSize:11,color:"#484F58",marginTop:1}}>{c.telefoon||""} {c.email?`· ${c.email}`:""}</div>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6,flexShrink:0}}>
+            <div style={{display:"flex",gap:6}}>
+              <span style={{background:"#1A3A5C",color:"#58A6FF",padding:"2px 8px",borderRadius:2,fontSize:11,fontWeight:600}}>{actief_z} actief</span>
+              <span style={{background:"#21262D",color:"#8B949E",padding:"2px 8px",borderRadius:2,fontSize:11,fontWeight:600}}>{totaal_z} totaal</span>
+            </div>
+            <div style={{display:"flex",gap:6}}>
+              <button style={{...S.btnGhost,padding:"4px 8px",fontSize:11,color:c.actief?"#f01e2c":"#3FB950",borderColor:c.actief?"#f01e2c":"#3FB950"}} onClick={()=>toggle(c.id,!c.actief)}>
+                {c.actief?"Deactiveer":"Activeer"}
+              </button>
+              <button style={{...S.btnGhost,padding:"4px 8px",fontSize:11}} onClick={()=>del(c.id)}>✕</button>
+            </div>
+          </div>
+        </div>
+      })}
+    </div>
+
+    {showNew&&<Modal title="Nieuwe chauffeur" onClose={()=>setShowNew(false)}>
+      <Fld l="Naam *" ch={<input style={S.inp} value={form.naam} onChange={e=>setForm(f=>({...f,naam:e.target.value}))}/>}/>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <Fld l="Telefoon" ch={<input style={S.inp} value={form.telefoon} onChange={e=>setForm(f=>({...f,telefoon:e.target.value}))}/>}/>
+        <Fld l="Email" ch={<input style={S.inp} type="email" value={form.email} onChange={e=>setForm(f=>({...f,email:e.target.value}))}/>}/>
+        <Fld l="Voertuig" ch={<input style={S.inp} value={form.voertuig} onChange={e=>setForm(f=>({...f,voertuig:e.target.value}))} placeholder="Auto, motor, bestelwagen..."/>}/>
+        <Fld l="Kenteken" ch={<input style={S.inp} value={form.kenteken} onChange={e=>setForm(f=>({...f,kenteken:e.target.value}))}/>}/>
+      </div>
+      {err&&<div style={{color:"#f01e2c",fontSize:12,marginBottom:10}}>{err}</div>}
+      <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+        <button style={S.btnGhost} onClick={()=>setShowNew(false)}>Annuleren</button>
+        <button style={S.btn} onClick={save} disabled={saving}>{saving?"Opslaan...":"Aanmaken"}</button>
+      </div>
+    </Modal>}
+  </div>
+}
+
+// ── KLANTEN ───────────────────────────────────────────────────────────────────
+function Klanten({klanten,zendingen,onRefresh}){
+  const [showNew,setShowNew]=React.useState(false);
   const [form,setForm]=React.useState({bedrijfsnaam:"",contactpersoon:"",email:"",telefoon:"",adres:"",stad:"",postcode:""});
   const [saving,setSaving]=React.useState(false);
   const [err,setErr]=React.useState("");
@@ -337,143 +475,219 @@ function Klanten({klanten,orders,onRefresh}){
 
   const filtered=klanten.filter(k=>!search||k.bedrijfsnaam.toLowerCase().includes(search.toLowerCase())||k.stad?.toLowerCase().includes(search.toLowerCase()));
 
-  async function saveKlant(){
+  async function save(){
     if(!form.bedrijfsnaam){setErr("Bedrijfsnaam is verplicht");return;}
     setSaving(true);setErr("");
     try{
       await db("/klanten",{method:"POST",headers:{Prefer:"return=minimal"},body:JSON.stringify(form)});
-      setShowModal(false);
-      setForm({bedrijfsnaam:"",contactpersoon:"",email:"",telefoon:"",adres:"",stad:"",postcode:""});
-      onRefresh();
+      setShowNew(false);setForm({bedrijfsnaam:"",contactpersoon:"",email:"",telefoon:"",adres:"",stad:"",postcode:""});onRefresh();
     }catch(e){setErr(e.message);}
     setSaving(false);
   }
 
-  async function deleteKlant(id){
+  async function del(id){
     if(!confirm("Klant verwijderen?"))return;
-    await db(`/klanten?id=eq.${id}`,{method:"DELETE"});
-    onRefresh();
+    await db(`/klanten?id=eq.${id}`,{method:"DELETE"});onRefresh();
   }
 
-  return <div style={{display:"flex",flexDirection:"column",gap:16}}>
-    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-      <div style={S.pageTitle}>Klanten</div>
-      <button style={S.btn} onClick={()=>setShowModal(true)}>+ Nieuwe klant</button>
+  return <div style={{display:"flex",flexDirection:"column",gap:14}}>
+    <div className="page-head" style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+      <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:26,letterSpacing:1}}>Klanten</div>
+      <button style={S.btn} onClick={()=>setShowNew(true)}>+ Nieuwe klant</button>
     </div>
-    <input style={{...S.input,maxWidth:300}} placeholder="Zoeken op naam of stad..." value={search} onChange={e=>setSearch(e.target.value)}/>
-    <div style={S.tableWrap}>
-      <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-        <thead style={{background:"#0D1117"}}>
-          <tr>{["Bedrijf","Contactpersoon","Email","Telefoon","Stad","Orders",""].map(h=><th key={h} style={S.th}>{h}</th>)}</tr>
-        </thead>
-        <tbody>
-          {filtered.length===0&&<tr><td colSpan={7} style={{...S.td,color:"#8B949E",textAlign:"center",padding:32}}>Geen klanten gevonden</td></tr>}
-          {filtered.map(k=>{
-            const cnt=orders.filter(o=>o.klant_id===k.id).length;
-            return <tr key={k.id}>
-              <td style={S.td}>
-                <div style={{display:"flex",alignItems:"center",gap:10}}>
-                  <div style={{width:28,height:28,borderRadius:2,background:"#2a0408",color:"#f01e2c",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,flexShrink:0}}>
-                    {k.bedrijfsnaam.slice(0,2).toUpperCase()}
-                  </div>
-                  <span style={{color:"#E6EDF3",fontWeight:500}}>{k.bedrijfsnaam}</span>
-                </div>
-              </td>
-              <td style={S.td}>{k.contactpersoon||"—"}</td>
-              <td style={{...S.td,color:"#8B949E"}}>{k.email||"—"}</td>
-              <td style={{...S.td,color:"#8B949E"}}>{k.telefoon||"—"}</td>
-              <td style={{...S.td,color:"#8B949E"}}>{k.stad||"—"}</td>
-              <td style={S.td}><span style={{background:"#2a0408",color:"#f01e2c",padding:"2px 8px",borderRadius:2,fontSize:12,fontWeight:600}}>{cnt}</span></td>
-              <td style={S.td}><button style={S.btnGhost} onClick={()=>deleteKlant(k.id)}>✕</button></td>
-            </tr>
-          })}
-        </tbody>
-      </table>
+    <input style={S.inp} placeholder="Zoeken op naam of stad..." value={search} onChange={e=>setSearch(e.target.value)}/>
+    <div style={{display:"flex",flexDirection:"column",gap:8}}>
+      {filtered.length===0&&<div style={{...S.card,color:"#8B949E",textAlign:"center",padding:28,fontSize:13}}>Geen klanten gevonden</div>}
+      {filtered.map(k=>{
+        const cnt=zendingen.filter(z=>z.klant_id===k.id).length;
+        return <div key={k.id} style={{...S.card,display:"flex",alignItems:"center",gap:12}}>
+          <div style={{width:42,height:42,borderRadius:2,background:"#2a0408",color:"#f01e2c",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,flexShrink:0}}>{k.bedrijfsnaam.slice(0,2).toUpperCase()}</div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontWeight:600,fontSize:14,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{k.bedrijfsnaam}</div>
+            <div style={{fontSize:12,color:"#8B949E",marginTop:2}}>{[k.contactpersoon,k.stad].filter(Boolean).join(" · ")}</div>
+            <div style={{fontSize:11,color:"#484F58"}}>{k.email||""}</div>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6,flexShrink:0}}>
+            <span style={{background:"#2a0408",color:"#f01e2c",padding:"2px 8px",borderRadius:2,fontSize:11,fontWeight:600}}>{cnt} zendingen</span>
+            <button style={{...S.btnGhost,padding:"4px 8px",fontSize:11}} onClick={()=>del(k.id)}>✕</button>
+          </div>
+        </div>
+      })}
     </div>
-
-    {showModal&&<Modal title="Nieuwe klant" onClose={()=>setShowModal(false)}>
-      <Field label="Bedrijfsnaam *"><input style={S.input} value={form.bedrijfsnaam} onChange={e=>setForm(f=>({...f,bedrijfsnaam:e.target.value}))}/></Field>
-      <Field label="Contactpersoon"><input style={S.input} value={form.contactpersoon} onChange={e=>setForm(f=>({...f,contactpersoon:e.target.value}))}/></Field>
-      <Field label="Email"><input style={S.input} type="email" value={form.email} onChange={e=>setForm(f=>({...f,email:e.target.value}))}/></Field>
-      <Field label="Telefoon"><input style={S.input} value={form.telefoon} onChange={e=>setForm(f=>({...f,telefoon:e.target.value}))}/></Field>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-        <Field label="Stad"><input style={S.input} value={form.stad} onChange={e=>setForm(f=>({...f,stad:e.target.value}))}/></Field>
-        <Field label="Postcode"><input style={S.input} value={form.postcode} onChange={e=>setForm(f=>({...f,postcode:e.target.value}))}/></Field>
+    {showNew&&<Modal title="Nieuwe klant" onClose={()=>setShowNew(false)}>
+      <Fld l="Bedrijfsnaam *" ch={<input style={S.inp} value={form.bedrijfsnaam} onChange={e=>setForm(f=>({...f,bedrijfsnaam:e.target.value}))}/>}/>
+      <Fld l="Contactpersoon" ch={<input style={S.inp} value={form.contactpersoon} onChange={e=>setForm(f=>({...f,contactpersoon:e.target.value}))}/>}/>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <Fld l="Email" ch={<input style={S.inp} type="email" value={form.email} onChange={e=>setForm(f=>({...f,email:e.target.value}))}/>}/>
+        <Fld l="Telefoon" ch={<input style={S.inp} value={form.telefoon} onChange={e=>setForm(f=>({...f,telefoon:e.target.value}))}/>}/>
+        <Fld l="Stad" ch={<input style={S.inp} value={form.stad} onChange={e=>setForm(f=>({...f,stad:e.target.value}))}/>}/>
+        <Fld l="Postcode" ch={<input style={S.inp} value={form.postcode} onChange={e=>setForm(f=>({...f,postcode:e.target.value}))}/>}/>
       </div>
-      <Field label="Adres"><input style={S.input} value={form.adres} onChange={e=>setForm(f=>({...f,adres:e.target.value}))}/></Field>
-      {err&&<div style={{color:"#f01e2c",fontSize:12,marginBottom:12}}>{err}</div>}
+      <Fld l="Adres" ch={<input style={S.inp} value={form.adres} onChange={e=>setForm(f=>({...f,adres:e.target.value}))}/>}/>
+      {err&&<div style={{color:"#f01e2c",fontSize:12,marginBottom:10}}>{err}</div>}
       <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
-        <button style={S.btnGhost} onClick={()=>setShowModal(false)}>Annuleren</button>
-        <button style={S.btn} onClick={saveKlant} disabled={saving}>{saving?"Opslaan...":"Klant aanmaken"}</button>
+        <button style={S.btnGhost} onClick={()=>setShowNew(false)}>Annuleren</button>
+        <button style={S.btn} onClick={save} disabled={saving}>{saving?"Opslaan...":"Aanmaken"}</button>
       </div>
     </Modal>}
   </div>
 }
 
-// ── ROOT ─────────────────────────────────────────────────────────────────────
+// ── DISPATCH ──────────────────────────────────────────────────────────────────
+function Dispatch({zendingen,chauffeurs,onRefresh}){
+  const open=zendingen.filter(z=>!z.chauffeur_id&&!["afgeleverd","voltooid","mislukt","geannuleerd"].includes(z.status));
+  const [sel,setSel]=React.useState({});
+
+  async function assign(zid){
+    const cid=sel[zid];
+    if(!cid){alert("Selecteer een chauffeur");return;}
+    await db(`/zendingen?id=eq.${zid}`,{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({chauffeur_id:cid,status:"toegewezen"})});
+    await db("/status_logs",{method:"POST",headers:{Prefer:"return=minimal"},body:JSON.stringify({zending_id:zid,status:"toegewezen"})});
+    onRefresh();
+  }
+
+  return <div style={{display:"flex",flexDirection:"column",gap:14}}>
+    <div>
+      <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:26,letterSpacing:1}}>Dispatch</div>
+      <div style={{fontSize:12,color:"#8B949E",marginTop:2}}>Wijs chauffeurs toe aan openstaande zendingen</div>
+    </div>
+
+    {open.length===0&&<div style={{...S.card,textAlign:"center",color:"#3FB950",padding:32,fontSize:14}}>✓ Alle zendingen zijn toegewezen</div>}
+
+    <div style={{display:"flex",flexDirection:"column",gap:8}}>
+      {open.map(z=>{
+        const k=z.ontvanger_naam||"Onbekend";
+        return <div key={z.id} style={{...S.card,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+              <span style={{color:"#f01e2c",fontFamily:"'Bebas Neue',sans-serif",fontSize:15}}>{z.zending_code}</span>
+              <Bdg status={z.status}/>
+              {z.cod_bedrag>0&&<span style={{background:"#2D1D00",color:"#D29922",fontSize:10,fontWeight:700,padding:"2px 6px",borderRadius:2}}>COD SRD {z.cod_bedrag}</span>}
+            </div>
+            <div style={{fontSize:13,color:"#E6EDF3",marginTop:4}}>{k} — {z.afleveradres}</div>
+            <div style={{fontSize:11,color:"#8B949E",marginTop:2}}>{z.district} · {z.diensttype}</div>
+          </div>
+          <div style={{display:"flex",gap:8,alignItems:"center",flexShrink:0}}>
+            <select style={{...S.sel,width:180}} value={sel[z.id]||""} onChange={e=>setSel(s=>({...s,[z.id]:e.target.value}))}>
+              <option value="">Chauffeur...</option>
+              {chauffeurs.filter(c=>c.actief).map(c=><option key={c.id} value={c.id}>{c.naam}</option>)}
+            </select>
+            <button style={S.btn} onClick={()=>assign(z.id)}>Toewijzen</button>
+          </div>
+        </div>
+      })}
+    </div>
+
+    <div>
+      <div style={{fontSize:13,fontWeight:600,marginBottom:10}}>Actieve ritten per chauffeur</div>
+      <div style={{display:"flex",flexDirection:"column",gap:8}}>
+        {chauffeurs.filter(c=>c.actief).map(c=>{
+          const ritten=zendingen.filter(z=>z.chauffeur_id===c.id&&["toegewezen","geaccepteerd","naar_ophaling","opgehaald","onderweg","aangekomen"].includes(z.status));
+          return <div key={c.id} style={S.card}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:ritten.length>0?10:0}}>
+              <div style={{width:8,height:8,borderRadius:"50%",background:"#3FB950"}}/>
+              <div style={{fontWeight:600,fontSize:13}}>{c.naam}</div>
+              <span style={{fontSize:11,color:"#8B949E"}}>{c.voertuig||""}</span>
+              <span style={{marginLeft:"auto",background:"#1A3A5C",color:"#58A6FF",fontSize:11,fontWeight:600,padding:"2px 7px",borderRadius:2}}>{ritten.length} rit{ritten.length!==1?"ten":""}</span>
+            </div>
+            {ritten.map(z=><div key={z.id} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 0",borderTop:"1px solid #21262D",fontSize:12}}>
+              <span style={{color:"#f01e2c",fontFamily:"'Bebas Neue',sans-serif",fontSize:13}}>{z.zending_code}</span>
+              <span style={{color:"#C9D1D9",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{z.afleveradres}</span>
+              <Bdg status={z.status} short/>
+            </div>)}
+          </div>
+        })}
+      </div>
+    </div>
+  </div>
+}
+
+// ── ROOT ──────────────────────────────────────────────────────────────────────
 function App(){
   const [page,setPage]=React.useState("dashboard");
-  const [orders,setOrders]=React.useState([]);
+  const [zendingen,setZendingen]=React.useState([]);
+  const [chauffeurs,setChauffeurs]=React.useState([]);
   const [klanten,setKlanten]=React.useState([]);
   const [loading,setLoading]=React.useState(true);
   const [error,setError]=React.useState("");
 
-  async function fetchData(){
+  async function load(){
     setLoading(true);
     try{
-      const [o,k]=await Promise.all([
-        db("/orders?select=*&order=aangemaakt_op.desc"),
+      const [z,c,k]=await Promise.all([
+        db("/zendingen?select=*&order=aangemaakt_op.desc"),
+        db("/chauffeurs?select=*&order=naam.asc"),
         db("/klanten?select=*&order=bedrijfsnaam.asc"),
       ]);
-      setOrders(o||[]);setKlanten(k||[]);setError("");
-    }catch(e){setError("Kan geen verbinding maken: "+e.message);}
+      setZendingen(z||[]);setChauffeurs(c||[]);setKlanten(k||[]);setError("");
+    }catch(e){setError("Verbindingsfout: "+e.message);}
     setLoading(false);
   }
 
-  React.useEffect(()=>{fetchData();},[]);
+  React.useEffect(()=>{load();},[]);
 
-  const pending=orders.filter(o=>o.status==="in_behandeling").length;
+  const open_dispatch=zendingen.filter(z=>!z.chauffeur_id&&!["afgeleverd","voltooid","mislukt"].includes(z.status)).length;
+
+  const nav=[
+    {id:"dashboard",icon:"▦",label:"Dashboard"},
+    {id:"zendingen",icon:"↗",label:"Zendingen",badge:zendingen.filter(z=>z.status==="aangemaakt").length},
+    {id:"dispatch",icon:"⊹",label:"Dispatch",badge:open_dispatch},
+    {id:"chauffeurs",icon:"◉",label:"Chauffeurs"},
+    {id:"klanten",icon:"◈",label:"Klanten"},
+  ];
 
   return <div style={{fontFamily:"'DM Sans',sans-serif",background:"#0D1117",color:"#E6EDF3",minHeight:"100vh",display:"flex",flexDirection:"column"}}>
+
     {/* TOPBAR */}
-    <div style={S.topbar}>
-      <div style={{display:"flex",alignItems:"center",fontFamily:"'Bebas Neue',sans-serif",fontSize:30,letterSpacing:1,lineHeight:1}}>
-        <span style={{color:"#E6EDF3",background:"#222",padding:"3px 8px"}}>SO</span>
-        <span style={{color:"#fff",background:"#f01e2c",padding:"3px 10px"}}>LOGICS</span>
+    <div style={{background:"#111",borderBottom:"2px solid #f01e2c",padding:"0 16px",display:"flex",alignItems:"center",justifyContent:"space-between",height:54,flexShrink:0,position:"sticky",top:0,zIndex:40}}>
+      <div style={{display:"flex",alignItems:"center",fontFamily:"'Bebas Neue',sans-serif",fontSize:26,letterSpacing:1,lineHeight:1}}>
+        <span style={{color:"#E6EDF3",background:"#222",padding:"2px 7px"}}>SO</span>
+        <span style={{color:"#fff",background:"#f01e2c",padding:"2px 9px"}}>LOGICS</span>
       </div>
-      <div style={{display:"flex",alignItems:"center",gap:10}}>
-        <div style={{display:"flex",alignItems:"center",gap:6}}>
-          <div style={{width:8,height:8,borderRadius:"50%",background:error?"#f01e2c":"#3FB950"}}/>
-          <span style={{fontSize:11,color:"#8B949E"}}>{error?"Offline":"Verbonden"}</span>
-        </div>
-        <button onClick={fetchData} style={{...S.btnGhost,fontSize:11}}>↺ Vernieuwen</button>
-        <div style={{width:32,height:32,background:"#222",borderRadius:2,border:"1px solid #333",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:600,color:"#aaa"}}>MT</div>
+      <div style={{display:"flex",alignItems:"center",gap:8}}>
+        <div style={{width:7,height:7,borderRadius:"50%",background:error?"#f01e2c":"#3FB950"}}/>
+        <span style={{fontSize:11,color:"#8B949E"}}>{error?"Offline":"Live"}</span>
+        <button onClick={load} style={{...S.btnGhost,padding:"5px 10px",fontSize:12,marginLeft:4}}>↺</button>
       </div>
     </div>
 
-    {/* BODY */}
-    <div style={{display:"flex",flex:1,overflow:"hidden",height:"calc(100vh - 58px)"}}>
+    <div style={{display:"flex",flex:1,overflow:"hidden",height:"calc(100vh - 54px)"}}>
+
       {/* SIDEBAR */}
-      <div style={S.sidebar}>
-        <div style={{fontSize:10,fontWeight:600,color:"#484F58",letterSpacing:"0.08em",textTransform:"uppercase",padding:"12px 10px 4px"}}>Menu</div>
-        <NavItem icon="▦" label="Dashboard" active={page==="dashboard"} onClick={()=>setPage("dashboard")}/>
-        <NavItem icon="↗" label="Orders" active={page==="orders"} badge={pending} onClick={()=>setPage("orders")}/>
-        <NavItem icon="◈" label="Klanten" active={page==="klanten"} onClick={()=>setPage("klanten")}/>
+      <div className="sidebar" style={{width:190,background:"#161B22",borderRight:"1px solid #21262D",padding:"12px 10px",display:"flex",flexDirection:"column",gap:2,flexShrink:0,overflowY:"auto"}}>
+        <div style={{fontSize:10,fontWeight:600,color:"#484F58",letterSpacing:"0.08em",textTransform:"uppercase",padding:"10px 10px 6px"}}>Menu</div>
+        {nav.map(n=><div key={n.id} onClick={()=>setPage(n.id)} style={{display:"flex",alignItems:"center",gap:9,padding:"9px 10px",borderRadius:2,fontSize:13,cursor:"pointer",color:page===n.id?"#f01e2c":"#8B949E",background:page===n.id?"#2a0408":"transparent",borderLeft:page===n.id?"2px solid #f01e2c":"2px solid transparent",transition:"all .1s"}}>
+          <span style={{fontSize:15}}>{n.icon}</span>
+          <span>{n.label}</span>
+          {n.badge>0&&<span style={{marginLeft:"auto",background:"#f01e2c",color:"#fff",fontSize:10,fontWeight:700,padding:"1px 6px",borderRadius:2}}>{n.badge}</span>}
+        </div>)}
       </div>
 
       {/* MAIN */}
-      <div style={S.main}>
-        {error&&<div style={{background:"#2a0408",border:"1px solid #f01e2c",borderRadius:2,padding:16,color:"#f01e2c",fontSize:13}}>{error}</div>}
+      <div className="main-wrap" style={{flex:1,overflowY:"auto",padding:18,display:"flex",flexDirection:"column",gap:16}}>
+        {error&&<div style={{background:"#2a0408",border:"1px solid #f01e2c",borderRadius:2,padding:12,color:"#f01e2c",fontSize:13}}>{error}</div>}
         {loading
-          ?<div style={{color:"#8B949E",textAlign:"center",marginTop:80,fontSize:14}}>Gegevens laden...</div>
+          ?<div style={{color:"#8B949E",textAlign:"center",marginTop:60,fontSize:14}}>Laden...</div>
           :<>
-            {page==="dashboard"&&<Dashboard orders={orders} klanten={klanten}/>}
-            {page==="orders"&&<Orders orders={orders} klanten={klanten} onRefresh={fetchData}/>}
-            {page==="klanten"&&<Klanten klanten={klanten} orders={orders} onRefresh={fetchData}/>}
+            {page==="dashboard"&&<Dashboard zendingen={zendingen} chauffeurs={chauffeurs} klanten={klanten}/>}
+            {page==="zendingen"&&<Zendingen zendingen={zendingen} chauffeurs={chauffeurs} klanten={klanten} onRefresh={load}/>}
+            {page==="dispatch"&&<Dispatch zendingen={zendingen} chauffeurs={chauffeurs} onRefresh={load}/>}
+            {page==="chauffeurs"&&<Chauffeurs chauffeurs={chauffeurs} zendingen={zendingen} onRefresh={load}/>}
+            {page==="klanten"&&<Klanten klanten={klanten} zendingen={zendingen} onRefresh={load}/>}
           </>
         }
       </div>
     </div>
+
+    {/* MOBILE BOTTOM NAV */}
+    <div className="bottom-nav" style={{display:"none",position:"fixed",bottom:0,left:0,right:0,background:"#161B22",borderTop:"2px solid #f01e2c",zIndex:50,height:62}}>
+      {nav.map(n=><button key={n.id} onClick={()=>setPage(n.id)} style={{flex:1,background:"none",border:"none",color:page===n.id?"#f01e2c":"#8B949E",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,fontFamily:"'DM Sans',sans-serif",position:"relative",padding:0,minWidth:0}}>
+        <span style={{fontSize:19}}>{n.icon}</span>
+        <span style={{fontSize:9,fontWeight:600}}>{n.label}</span>
+        {n.badge>0&&<span style={{position:"absolute",top:5,right:"calc(50% - 18px)",background:"#f01e2c",color:"#fff",fontSize:8,fontWeight:700,padding:"1px 4px",borderRadius:8,minWidth:14,textAlign:"center"}}>{n.badge}</span>}
+      </button>)}
+    </div>
+
   </div>
 }
 
