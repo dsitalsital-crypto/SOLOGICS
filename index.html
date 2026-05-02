@@ -241,14 +241,21 @@ function Zendingen({zendingen,chauffeurs,klanten,onRefresh}){
     if(!form.afleveradres){setErr("Afleveradres is verplicht");return;}
     setSaving(true);setErr("");
     try{
-      await db("/zendingen",{method:"POST",headers:{Prefer:"return=minimal"},body:JSON.stringify({
-        ...form,
-        gewicht_kg:form.gewicht_kg||null,
-        cod_bedrag:parseFloat(form.cod_bedrag)||0,
-        klant_id:form.klant_id||null,
-        chauffeur_id:form.chauffeur_id||null,
-        zending_code:""
-      })});
+      try{
+        await db("/zendingen",{method:"POST",headers:{Prefer:"return=representation"},body:JSON.stringify({
+          ...form,
+          gewicht_kg:form.gewicht_kg||null,
+          cod_bedrag:parseFloat(form.cod_bedrag)||0,
+          klant_id:form.klant_id||null,
+          chauffeur_id:form.chauffeur_id||null,
+          zending_code:""
+        })});
+      }catch(e){
+        // 201/empty response is fine - zending was created
+        if(!e.message.includes("Unexpected end of JSON")&&!e.message.includes("201")){
+          setErr(e.message);setSaving(false);return;
+        }
+      }
       setShowNew(false);
       setForm({klant_id:"",ontvanger_naam:"",ontvanger_tel:"",ontvanger_email:"",ophaaladres:"",afleveradres:"",district:"Paramaribo",pakkettype:"",gewicht_kg:"",diensttype:"standaard",cod_bedrag:"",chauffeur_id:"",notities:""});
       onRefresh();
@@ -257,16 +264,16 @@ function Zendingen({zendingen,chauffeurs,klanten,onRefresh}){
   }
 
   async function updateStatus(id,status){
-    await db(`/zendingen?id=eq.${id}`,{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({status})});
+    await db(`/zendingen?id=eq.${id}`,{method:"PATCH",headers:{Prefer:"return=representation"},body:JSON.stringify({status})});
     // log it
-    await db("/status_logs",{method:"POST",headers:{Prefer:"return=minimal"},body:JSON.stringify({zending_id:id,status})});
+    await db("/status_logs",{method:"POST",headers:{Prefer:"return=representation"},body:JSON.stringify({zending_id:id,status})});
     onRefresh();
     if(detail?.id===id)setDetail(d=>({...d,status}));
   }
 
   async function assignDriver(id,chauffeur_id){
-    await db(`/zendingen?id=eq.${id}`,{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({chauffeur_id,status:"toegewezen"})});
-    await db("/status_logs",{method:"POST",headers:{Prefer:"return=minimal"},body:JSON.stringify({zending_id:id,status:"toegewezen"})});
+    await db(`/zendingen?id=eq.${id}`,{method:"PATCH",headers:{Prefer:"return=representation"},body:JSON.stringify({chauffeur_id,status:"toegewezen"})});
+    await db("/status_logs",{method:"POST",headers:{Prefer:"return=representation"},body:JSON.stringify({zending_id:id,status:"toegewezen"})});
     onRefresh();
     if(detail?.id===id)setDetail(d=>({...d,chauffeur_id,status:"toegewezen"}));
   }
@@ -406,14 +413,14 @@ function Chauffeurs({chauffeurs,zendingen,onRefresh}){
     if(!form.naam){setErr("Naam is verplicht");return;}
     setSaving(true);setErr("");
     try{
-      await db("/chauffeurs",{method:"POST",headers:{Prefer:"return=minimal"},body:JSON.stringify(form)});
+      await db("/chauffeurs",{method:"POST",headers:{Prefer:"return=representation"},body:JSON.stringify(form)});
       setShowNew(false);setForm({naam:"",telefoon:"",email:"",kenteken:"",voertuig:"",actief:true});onRefresh();
     }catch(e){setErr(e.message);}
     setSaving(false);
   }
 
   async function toggle(id,actief){
-    await db(`/chauffeurs?id=eq.${id}`,{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({actief})});
+    await db(`/chauffeurs?id=eq.${id}`,{method:"PATCH",headers:{Prefer:"return=representation"},body:JSON.stringify({actief})});
     onRefresh();
   }
 
@@ -492,7 +499,7 @@ function Klanten({klanten,zendingen,onRefresh}){
     if(!form.bedrijfsnaam){setErr("Bedrijfsnaam is verplicht");return;}
     setSaving(true);setErr("");
     try{
-      await db("/klanten",{method:"POST",headers:{Prefer:"return=minimal"},body:JSON.stringify(form)});
+      await db("/klanten",{method:"POST",headers:{Prefer:"return=representation"},body:JSON.stringify(form)});
       setShowNew(false);setForm({bedrijfsnaam:"",contactpersoon:"",email:"",telefoon:"",adres:"",stad:"",postcode:""});onRefresh();
     }catch(e){setErr(e.message);}
     setSaving(false);
@@ -554,8 +561,8 @@ function Dispatch({zendingen,chauffeurs,onRefresh}){
   async function assign(zid){
     const cid=sel[zid];
     if(!cid){alert("Selecteer een chauffeur");return;}
-    await db(`/zendingen?id=eq.${zid}`,{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({chauffeur_id:cid,status:"toegewezen"})});
-    await db("/status_logs",{method:"POST",headers:{Prefer:"return=minimal"},body:JSON.stringify({zending_id:zid,status:"toegewezen"})});
+    await db(`/zendingen?id=eq.${zid}`,{method:"PATCH",headers:{Prefer:"return=representation"},body:JSON.stringify({chauffeur_id:cid,status:"toegewezen"})});
+    await db("/status_logs",{method:"POST",headers:{Prefer:"return=representation"},body:JSON.stringify({zending_id:zid,status:"toegewezen"})});
     onRefresh();
   }
 
