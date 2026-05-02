@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<title>SOlogics — Zending Volgen</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Bebas+Neue&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0D1117;font-family:'DM Sans',sans-serif;color:#E6EDF3;min-height:100vh}
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:#0D1117}::-webkit-scrollbar-thumb{background:#21262D}
+input{font-family:'DM Sans',sans-serif;color:#E6EDF3;-webkit-appearance:none}
+input::placeholder{color:#484F58}
+button{-webkit-tap-highlight-color:transparent}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+.fade-in{animation:fadeIn .4s ease forwards}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+
+const URL="https://bvnyzxusfiloaivvhlnn.supabase.co";
+const KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ2bnl6eHVzZmlsb2FpdnZobG5uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2NjAzMjcsImV4cCI6MjA5MzIzNjMyN30.uT4KjSUxK9rwINGRktVcUgu3vdwvuoQ3lEFfccfJTQY";
+const H={"Content-Type":"application/json",apikey:KEY,Authorization:`Bearer ${KEY}`};
+
+async function db(path,o={}){
+  const r=await fetch(URL+"/rest/v1"+path,{headers:{...H,...(o.headers||{})},...o});
+  if(!r.ok)throw new Error(await r.text());
+  if(r.status===204)return null;
+  return r.json();
+}
+
+const fd=d=>d?new Date(d).toLocaleDateString("nl-NL",{day:"2-digit",month:"long",year:"numeric"}):"—";
+const ft=d=>d?new Date(d).toLocaleTimeString("nl-NL",{hour:"2-digit",minute:"2-digit"}):"—";
+const fdt=d=>d?`${fd(d)} om ${ft(d)}`:"—";
+
+const FLOW=[
+  {s:"aangemaakt",   icon:"📦", label:"Zending aangemaakt",    desc:"Je zending is geregistreerd in ons systeem"},
+  {s:"toegewezen",   icon:"👤", label:"Chauffeur toegewezen",   desc:"Een chauffeur is toegewezen aan je zending"},
+  {s:"geaccepteerd", icon:"✅", label:"Geaccepteerd",           desc:"De chauffeur heeft de zending geaccepteerd"},
+  {s:"naar_ophaling",icon:"🚗", label:"Onderweg naar ophaling", desc:"De chauffeur is onderweg naar het ophaaladres"},
+  {s:"opgehaald",    icon:"📬", label:"Pakket opgehaald",       desc:"Je pakket is opgehaald door de chauffeur"},
+  {s:"onderweg",     icon:"🚚", label:"Onderweg naar jou",      desc:"Je pakket is onderweg naar het afleveradres"},
+  {s:"aangekomen",   icon:"📍", label:"Aangekomen",             desc:"De chauffeur is aangekomen bij het afleveradres"},
+  {s:"afgeleverd",   icon:"🎉", label:"Afgeleverd!",            desc:"Je pakket is succesvol afgeleverd"},
+];
+
+const FLOW_STATUSES=FLOW.map(f=>f.s);
+
+function getStepIndex(status){
+  const idx=FLOW_STATUSES.indexOf(status);
+  return idx===-1?0:idx;
+}
+
+const STATUS_META={
+  aangemaakt:   {c:"#8B949E",bg:"#21262D",l:"Aangemaakt"},
+  toegewezen:   {c:"#BC8CFF",bg:"#2A1F5A",l:"Toegewezen"},
+  geaccepteerd: {c:"#58A6FF",bg:"#1A3A5C",l:"Geaccepteerd"},
+  naar_ophaling:{c:"#D29922",bg:"#2D1D00",l:"Naar ophaling"},
+  opgehaald:    {c:"#F0883E",bg:"#2D1800",l:"Opgehaald"},
+  onderweg:     {c:"#58A6FF",bg:"#1A3A5C",l:"Onderweg"},
+  aangekomen:   {c:"#79B8FF",bg:"#1A3A5C",l:"Aangekomen"},
+  afgeleverd:   {c:"#3FB950",bg:"#112D24",l:"Afgeleverd ✓"},
+  mislukt:      {c:"#f01e2c",bg:"#2a0408",l:"Mislukt"},
+  retour:       {c:"#D29922",bg:"#2D1D00",l:"Retour"},
+  voltooid:     {c:"#3FB950",bg:"#112D24",l:"Voltooid"},
+};
+
+function App(){
+  const [code,setCode]=React.useState("");
+  const [input,setInput]=React.useState("");
+  const [zending,setZending]=React.useState(null);
+  const [logs,setLogs]=React.useState([]);
+  const [chauffeur,setChauffeur]=React.useState(null);
+  const [loading,setLoading]=React.useState(false);
+  const [err,setErr]=React.useState("");
+  const [searched,setSearched]=React.useState(false);
+
+  // Check URL param on load
+  React.useEffect(()=>{
+    const p=new URLSearchParams(window.location.search);
+    const c=p.get("code");
+    if(c){setInput(c);search(c);}
+  },[]);
+
+  async function search(overrideCode){
+    const q=(overrideCode||input).trim().toUpperCase();
+    if(!q){setErr("Voer een zendingscode in");return;}
+    setLoading(true);setErr("");setZending(null);setLogs([]);setChauffeur(null);setSearched(true);
+    try{
+      const results=await db(`/zendingen?zending_code=eq.${q}&select=*`);
+      if(!results||results.length===0){
+        setErr("Zending niet gevonden. Controleer de code en probeer opnieuw.");
+        setLoading(false);return;
+      }
+      const z=results[0];
+      setZending(z);
+      setCode(q);
+
+      // Load logs
+      const l=await db(`/status_logs?zending_id=eq.${z.id}&order=tijdstip.asc`);
+      setLogs(l||[]);
+
+      // Load chauffeur
+      if(z.chauffeur_id){
+        const ch=await db(`/chauffeurs?id=eq.${z.chauffeur_id}&select=naam,telefoon,voertuig,kenteken`);
+        if(ch&&ch.length>0)setChauffeur(ch[0]);
+      }
+    }catch(e){setErr("Fout bij ophalen: "+e.message);}
+    setLoading(false);
+  }
+
+  const stepIdx=zending?getStepIndex(zending.status):0;
+  const isMislukt=zending?.status==="mislukt";
+  const isRetour=zending?.status==="retour";
+  const isAfgeleverd=zending?.status==="afgeleverd"||zending?.status==="voltooid";
+  const meta=zending?STATUS_META[zending.status]:null;
+
+  return <div style={{minHeight:"100vh",display:"flex",flexDirection:"column"}}>
+
+    {/* HEADER */}
+    <div style={{background:"#111",borderBottom:"2px solid #f01e2c",padding:"0 20px",height:56,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+      <div style={{display:"flex",alignItems:"center",fontFamily:"'Bebas Neue',sans-serif",fontSize:26,letterSpacing:1,lineHeight:1}}>
+        <span style={{color:"#E6EDF3",background:"#222",padding:"2px 7px"}}>SO</span>
+        <span style={{color:"#fff",background:"#f01e2c",padding:"2px 9px"}}>LOGICS</span>
+      </div>
+      <div style={{fontSize:12,color:"#8B949E"}}>Zending Volgen</div>
+    </div>
+
+    {/* HERO SEARCH */}
+    <div style={{background:"linear-gradient(180deg,#161B22 0%,#0D1117 100%)",borderBottom:"1px solid #21262D",padding:"32px 20px"}}>
+      <div style={{maxWidth:560,margin:"0 auto"}}>
+        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:32,letterSpacing:1,marginBottom:6,textAlign:"center"}}>Waar is mijn pakket?</div>
+        <div style={{fontSize:13,color:"#8B949E",textAlign:"center",marginBottom:24}}>Voer je zendingscode in om de status te bekijken</div>
+        <div style={{display:"flex",gap:8}}>
+          <input
+            style={{flex:1,background:"#0D1117",border:"2px solid #30363D",borderRadius:2,color:"#E6EDF3",padding:"12px 14px",fontSize:15,outline:"none",fontFamily:"'DM Sans',sans-serif",letterSpacing:"0.05em",textTransform:"uppercase"}}
+            placeholder="SL-2026-0001"
+            value={input}
+            onChange={e=>setInput(e.target.value.toUpperCase())}
+            onKeyDown={e=>e.key==="Enter"&&search()}
+          />
+          <button onClick={()=>search()} disabled={loading} style={{background:"#f01e2c",color:"#fff",border:"none",borderRadius:2,padding:"12px 24px",fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",flexShrink:0,display:"flex",alignItems:"center",gap:8}}>
+            {loading?<span style={{width:16,height:16,border:"2px solid rgba(255,255,255,.3)",borderTopColor:"#fff",borderRadius:"50%",display:"inline-block",animation:"spin 0.6s linear infinite"}}/>:"→"}
+            {loading?"Zoeken...":"Zoeken"}
+          </button>
+        </div>
+        {err&&<div style={{marginTop:12,background:"#2a0408",border:"1px solid #f01e2c",borderRadius:2,padding:"10px 14px",color:"#f01e2c",fontSize:13}}>{err}</div>}
+      </div>
+    </div>
+
+    {/* RESULTS */}
+    {zending&&<div className="fade-in" style={{flex:1,padding:"24px 20px",maxWidth:640,margin:"0 auto",width:"100%"}}>
+
+      {/* STATUS BANNER */}
+      <div style={{background:meta.bg,border:`1px solid ${meta.c}`,borderRadius:2,padding:"16px 20px",marginBottom:20,display:"flex",alignItems:"center",gap:14}}>
+        <div style={{fontSize:32}}>{isAfgeleverd?"🎉":isMislukt?"❌":isRetour?"🔄":"🚚"}</div>
+        <div>
+          <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:22,color:meta.c,letterSpacing:.5}}>{meta.l}</div>
+          <div style={{fontSize:13,color:"#C9D1D9",marginTop:2}}>
+            {isAfgeleverd&&"Je pakket is succesvol afgeleverd!"}
+            {isMislukt&&"De levering is mislukt. Neem contact op met SOlogics."}
+            {isRetour&&"Je pakket is retour gegaan naar het magazijn."}
+            {!isAfgeleverd&&!isMislukt&&!isRetour&&"Je pakket is onderweg."}
+          </div>
+        </div>
+      </div>
+
+      {/* ZENDING INFO */}
+      <div style={{background:"#161B22",border:"1px solid #21262D",borderRadius:2,padding:16,marginBottom:16}}>
+        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:16,letterSpacing:.5,marginBottom:12,color:"#8B949E"}}>Zendingsinformatie</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          {[
+            ["Zendingscode",zending.zending_code],
+            ["Diensttype",(zending.diensttype||"standaard").replace("_"," ")],
+            ["Afleveradres",zending.afleveradres],
+            ["District",zending.district||"—"],
+            ...(zending.cod_bedrag>0?[["COD bedrag",`SRD ${zending.cod_bedrag}`]]:[] ),
+            ["Aangemaakt op",fd(zending.aangemaakt_op)],
+          ].map(([k,v])=><div key={k} style={{background:"#0D1117",borderRadius:2,padding:"8px 10px"}}>
+            <div style={{fontSize:10,color:"#8B949E",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>{k}</div>
+            <div style={{fontSize:13,color:"#E6EDF3",fontWeight:500}}>{v}</div>
+          </div>)}
+        </div>
+      </div>
+
+      {/* CHAUFFEUR INFO */}
+      {chauffeur&&<div style={{background:"#161B22",border:"1px solid #21262D",borderRadius:2,padding:16,marginBottom:16,display:"flex",alignItems:"center",gap:12}}>
+        <div style={{width:44,height:44,borderRadius:2,background:"#112D24",color:"#3FB950",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:700,flexShrink:0}}>
+          {chauffeur.naam.slice(0,2).toUpperCase()}
+        </div>
+        <div style={{flex:1}}>
+          <div style={{fontSize:10,color:"#8B949E",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em"}}>Jouw chauffeur</div>
+          <div style={{fontSize:14,fontWeight:600,marginTop:2}}>{chauffeur.naam}</div>
+          <div style={{fontSize:12,color:"#8B949E",marginTop:1}}>{[chauffeur.voertuig,chauffeur.kenteken].filter(Boolean).join(" · ")}</div>
+        </div>
+        {chauffeur.telefoon&&<a href={`https://wa.me/${chauffeur.telefoon.replace(/\D/g,"")}`} target="_blank" style={{background:"#1a4731",color:"#3FB950",border:"1px solid #3FB950",borderRadius:2,padding:"8px 12px",fontSize:12,fontWeight:600,textDecoration:"none",display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+          <span>💬</span> WhatsApp
+        </a>}
+      </div>}
+
+      {/* PROGRESS TIMELINE */}
+      {!isMislukt&&!isRetour&&<div style={{background:"#161B22",border:"1px solid #21262D",borderRadius:2,padding:16,marginBottom:16}}>
+        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:16,letterSpacing:.5,marginBottom:16,color:"#8B949E"}}>Bezorgstatus</div>
+        {FLOW.map((step,i)=>{
+          const done=i<=stepIdx;
+          const active=i===stepIdx;
+          const isLast=i===FLOW.length-1;
+          return <div key={step.s} style={{display:"flex",gap:12,position:"relative"}}>
+            {/* Line */}
+            {!isLast&&<div style={{position:"absolute",left:17,top:34,width:2,height:"calc(100% - 8px)",background:done&&i<stepIdx?"#f01e2c":"#21262D"}}/>}
+            {/* Circle */}
+            <div style={{width:36,height:36,borderRadius:2,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:active?"#f01e2c":done?"#2a0408":"#21262D",border:active?"2px solid #f01e2c":done?"1px solid #f01e2c":"1px solid #30363D",fontSize:16,zIndex:1,animation:active?"pulse 2s infinite":"none"}}>
+              {done?step.icon:<span style={{opacity:.3}}>{step.icon}</span>}
+            </div>
+            <div style={{flex:1,paddingBottom:20}}>
+              <div style={{fontSize:13,fontWeight:done?600:400,color:active?"#f01e2c":done?"#E6EDF3":"#484F58",marginTop:8}}>{step.label}</div>
+              {active&&<div style={{fontSize:12,color:"#8B949E",marginTop:2}}>{step.desc}</div>}
+              {active&&logs.filter(l=>l.status===step.s).slice(-1).map(l=><div key={l.id} style={{fontSize:11,color:"#484F58",marginTop:3}}>{fdt(l.tijdstip)}</div>)}
+            </div>
+          </div>
+        })}
+      </div>}
+
+      {/* STATUS LOG */}
+      {logs.length>0&&<div style={{background:"#161B22",border:"1px solid #21262D",borderRadius:2,padding:16,marginBottom:16}}>
+        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:16,letterSpacing:.5,marginBottom:12,color:"#8B949E"}}>Geschiedenis</div>
+        <div style={{display:"flex",flexDirection:"column",gap:0}}>
+          {[...logs].reverse().map((l,i)=>{
+            const m=STATUS_META[l.status]||STATUS_META.aangemaakt;
+            return <div key={l.id} style={{display:"flex",gap:12,padding:"10px 0",borderBottom:i<logs.length-1?"1px solid #21262D":"none"}}>
+              <span style={{fontSize:12,fontWeight:700,padding:"2px 7px",borderRadius:2,background:m.bg,color:m.c,whiteSpace:"nowrap",height:"fit-content",marginTop:2}}>{m.l}</span>
+              <div style={{flex:1}}>
+                {l.notitie&&<div style={{fontSize:13,color:"#C9D1D9"}}>{l.notitie}</div>}
+                <div style={{fontSize:11,color:"#484F58",marginTop:2}}>{fdt(l.tijdstip)}</div>
+              </div>
+            </div>
+          })}
+        </div>
+      </div>}
+
+      {/* CONTACT */}
+      <div style={{background:"#161B22",border:"1px solid #21262D",borderRadius:2,padding:16,textAlign:"center"}}>
+        <div style={{fontSize:13,color:"#8B949E",marginBottom:12}}>Vragen over je zending?</div>
+        <div style={{display:"flex",gap:8,justifyContent:"center",flexWrap:"wrap"}}>
+          <a href="https://wa.me/597" target="_blank" style={{background:"#1a4731",color:"#3FB950",border:"1px solid #3FB950",borderRadius:2,padding:"9px 16px",fontSize:13,fontWeight:600,textDecoration:"none",display:"inline-flex",alignItems:"center",gap:6}}>
+            💬 WhatsApp
+          </a>
+          <a href="mailto:info@sologics.sr" style={{background:"transparent",color:"#8B949E",border:"1px solid #30363D",borderRadius:2,padding:"9px 16px",fontSize:13,fontWeight:600,textDecoration:"none",display:"inline-flex",alignItems:"center",gap:6}}>
+            ✉ Email
+          </a>
+        </div>
+      </div>
+
+    </div>}
+
+    {/* EMPTY STATE */}
+    {!zending&&searched&&!loading&&!err&&<div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12,color:"#484F58",padding:40}}>
+      <div style={{fontSize:48}}>📭</div>
+      <div style={{fontSize:14}}>Geen resultaten</div>
+    </div>}
+
+    {!searched&&!loading&&<div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16,color:"#484F58",padding:40}}>
+      <div style={{fontSize:56}}>📦</div>
+      <div style={{fontSize:14,textAlign:"center",maxWidth:280,lineHeight:1.6}}>Voer je zendingscode in om te zien waar je pakket is</div>
+      <div style={{fontSize:12,color:"#30363D",textAlign:"center"}}>Je code staat in het bevestigingsbericht van SOlogics</div>
+    </div>}
+
+    {/* FOOTER */}
+    <div style={{borderTop:"1px solid #21262D",padding:"14px 20px",textAlign:"center",fontSize:11,color:"#484F58"}}>
+      © 2026 SOlogics Suriname · <a href="#" style={{color:"#f01e2c",textDecoration:"none"}}>sologics.sr</a>
+    </div>
+
+  </div>
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
