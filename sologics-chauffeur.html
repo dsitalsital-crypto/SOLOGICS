@@ -35,10 +35,23 @@ const SUPA_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 const H={"Content-Type":"application/json",apikey:SUPA_KEY,Authorization:`Bearer ${SUPA_KEY}`};
 
 async function db(path,o={}){
-  const r=await fetch(SUPA_URL+"/rest/v1"+path,{headers:{...H,...(o.headers||{})},...o});
+  const sep=path.includes("?") ? "&" : "?";
+  const url=SUPA_URL+"/rest/v1"+path+sep+"apikey="+KEY;
+  const method=o.method||"GET";
+  const reqHeaders=new Headers();
+  reqHeaders.set("apikey",KEY);
+  reqHeaders.set("Authorization","Bearer "+KEY);
+  reqHeaders.set("Accept","application/json");
+  if(method!=="GET"&&method!=="DELETE"){
+    reqHeaders.set("Content-Type","application/json");
+  }
+  if(o.headers){Object.entries(o.headers).forEach(([k,v])=>reqHeaders.set(k,v));}
+  const r=await fetch(url,{...o,method,headers:reqHeaders});
   if(!r.ok)throw new Error(await r.text());
-  if(r.status===204)return null;
-  return r.json();
+  if(r.status===204||r.status===201)return null;
+  const text=await r.text();
+  if(!text||text.trim()==="")return null;
+  return JSON.parse(text);
 }
 
 const STATUS_FLOW={
@@ -157,8 +170,8 @@ function RitDetail({z,onClose,onRefresh,chauffeur}){
       lat=pos.coords.latitude;lng=pos.coords.longitude;
     }catch(e){}
 
-    await db(`/zendingen?id=eq.${z.id}`,{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({status:flow.next})});
-    await db("/status_logs",{method:"POST",headers:{Prefer:"return=minimal"},body:JSON.stringify({zending_id:z.id,status:flow.next,lat,lng})});
+    await db(`/zendingen?id=eq.${z.id}`,{method:"PATCH",headers:{Prefer:"return=representation"},body:JSON.stringify({status:flow.next})});
+    await db("/status_logs",{method:"POST",headers:{Prefer:"return=representation"},body:JSON.stringify({zending_id:z.id,status:flow.next,lat,lng})});
 
     // If afgeleverd and COD, show COD confirmation
     if(flow.next==="afgeleverd"&&z.cod_bedrag>0){
@@ -169,14 +182,14 @@ function RitDetail({z,onClose,onRefresh,chauffeur}){
 
   async function markMislukt(){
     setLoading(true);
-    await db(`/zendingen?id=eq.${z.id}`,{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({status:"mislukt"})});
-    await db("/status_logs",{method:"POST",headers:{Prefer:"return=minimal"},body:JSON.stringify({zending_id:z.id,status:"mislukt",notitie:reden})});
+    await db(`/zendingen?id=eq.${z.id}`,{method:"PATCH",headers:{Prefer:"return=representation"},body:JSON.stringify({status:"mislukt"})});
+    await db("/status_logs",{method:"POST",headers:{Prefer:"return=representation"},body:JSON.stringify({zending_id:z.id,status:"mislukt",notitie:reden})});
     setLoading(false);onRefresh();onClose();
   }
 
   async function confirmCOD(){
-    await db(`/zendingen?id=eq.${z.id}`,{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({cod_ontvangen:true})});
-    await db("/cod_transacties",{method:"POST",headers:{Prefer:"return=minimal"},body:JSON.stringify({zending_id:z.id,chauffeur_id:chauffeur.id,bedrag:parseFloat(codBedrag)||z.cod_bedrag,ontvangen:true})});
+    await db(`/zendingen?id=eq.${z.id}`,{method:"PATCH",headers:{Prefer:"return=representation"},body:JSON.stringify({cod_ontvangen:true})});
+    await db("/cod_transacties",{method:"POST",headers:{Prefer:"return=representation"},body:JSON.stringify({zending_id:z.id,chauffeur_id:chauffeur.id,bedrag:parseFloat(codBedrag)||z.cod_bedrag,ontvangen:true})});
     setShowCOD(false);onRefresh();onClose();
   }
 
