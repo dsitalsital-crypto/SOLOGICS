@@ -233,14 +233,22 @@ function PODScreen({z,chauffeur,onDone,onClose}){
   }
 
   async function uploadFoto(file){
-    const ext=file.name.split(".").pop();
+    const ext=file.name?file.name.split(".").pop():"jpg";
     const path=z.id+"/"+Date.now()+"."+ext;
     const res=await fetch(SUPA_URL+"/storage/v1/object/pod-fotos/"+path,{
       method:"POST",
-      headers:{apikey:KEY,Authorization:"Bearer "+KEY,"Content-Type":file.type},
+      headers:{
+        "apikey":KEY,
+        "Authorization":"Bearer "+KEY,
+        "Content-Type":file.type||"image/jpeg",
+        "x-upsert":"true"
+      },
       body:file
     });
-    if(!res.ok)throw new Error("Foto upload mislukt");
+    if(!res.ok){
+      const err=await res.text();
+      throw new Error("Upload mislukt: "+err);
+    }
     return SUPA_URL+"/storage/v1/object/public/pod-fotos/"+path;
   }
 
