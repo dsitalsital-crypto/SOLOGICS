@@ -179,6 +179,140 @@ function RitKaart({z,onTap,compact}){
   </div>
 }
 
+
+// ── POD SCREEN ────────────────────────────────────────────────────────────────
+function PODScreen({z,chauffeur,onDone,onClose}){
+  const [ontvanger,setOntvanger]=React.useState(z.ontvanger_naam||"");
+  const [foto,setFoto]=React.useState(null);
+  const [fotoPreview,setFotoPreview]=React.useState(null);
+  const [handtekening,setHandtekening]=React.useState(null);
+  const [saving,setSaving]=React.useState(false);
+  const [err,setErr]=React.useState("");
+  const canvasRef=React.useRef(null);
+  const isDrawing=React.useRef(false);
+
+  function startDraw(e){
+    isDrawing.current=true;
+    const canvas=canvasRef.current;
+    const ctx=canvas.getContext("2d");
+    const rect=canvas.getBoundingClientRect();
+    const x=(e.touches?e.touches[0].clientX:e.clientX)-rect.left;
+    const y=(e.touches?e.touches[0].clientY:e.clientY)-rect.top;
+    ctx.beginPath();ctx.moveTo(x,y);
+  }
+  function draw(e){
+    if(!isDrawing.current)return;
+    e.preventDefault();
+    const canvas=canvasRef.current;
+    const ctx=canvas.getContext("2d");
+    const rect=canvas.getBoundingClientRect();
+    const x=(e.touches?e.touches[0].clientX:e.clientX)-rect.left;
+    const y=(e.touches?e.touches[0].clientY:e.clientY)-rect.top;
+    ctx.lineWidth=2;ctx.lineCap="round";ctx.strokeStyle="#E6EDF3";
+    ctx.lineTo(x,y);ctx.stroke();
+  }
+  function endDraw(){
+    isDrawing.current=false;
+    const canvas=canvasRef.current;
+    setHandtekening(canvas.toDataURL());
+  }
+  function clearCanvas(){
+    const canvas=canvasRef.current;
+    const ctx=canvas.getContext("2d");
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    setHandtekening(null);
+  }
+
+  function handleFoto(e){
+    const file=e.target.files[0];
+    if(!file)return;
+    setFoto(file);
+    const reader=new FileReader();
+    reader.onload=ev=>setFotoPreview(ev.target.result);
+    reader.readAsDataURL(file);
+  }
+
+  async function uploadFoto(file){
+    const ext=file.name.split(".").pop();
+    const path=z.id+"/"+Date.now()+"."+ext;
+    const res=await fetch(SUPA_URL+"/storage/v1/object/pod-fotos/"+path,{
+      method:"POST",
+      headers:{apikey:KEY,Authorization:"Bearer "+KEY,"Content-Type":file.type},
+      body:file
+    });
+    if(!res.ok)throw new Error("Foto upload mislukt");
+    return SUPA_URL+"/storage/v1/object/public/pod-fotos/"+path;
+  }
+
+  async function save(){
+    if(!ontvanger){setErr("Vul de naam van de ontvanger in");return;}
+    setSaving(true);setErr("");
+    try{
+      let foto_url=null;
+      if(foto)foto_url=await uploadFoto(foto);
+      let lat=null,lng=null;
+      try{
+        const pos=await new Promise((res,rej)=>navigator.geolocation.getCurrentPosition(res,rej,{timeout:5000}));
+        lat=pos.coords.latitude;lng=pos.coords.longitude;
+      }catch(e){}
+      await db("/pod",{method:"POST",headers:{Prefer:"return=representation"},body:JSON.stringify({zending_id:z.id,ontvanger,handtekening:handtekening||null,foto_url,lat,lng})});
+      await db("/zendingen?id=eq."+z.id,{method:"PATCH",headers:{Prefer:"return=representation"},body:JSON.stringify({status:"afgeleverd"})});
+      await db("/status_logs",{method:"POST",headers:{Prefer:"return=representation"},body:JSON.stringify({zending_id:z.id,status:"afgeleverd",lat,lng})});
+      onDone();
+    }catch(e){setErr(e.message);}
+    setSaving(false);
+  }
+
+  return <div style={{position:"fixed",inset:0,background:"#0D1117",zIndex:200,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+    <div style={{background:"#111",borderBottom:"2px solid #3FB950",padding:"12px 16px",display:"flex",alignItems:"center",gap:12,flexShrink:0}}>
+      <button onClick={onClose} style={{background:"#21262D",border:"none",color:"#E6EDF3",width:36,height:36,borderRadius:2,fontSize:18,display:"flex",alignItems:"center",justifyContent:"center"}}>←</button>
+      <div style={{flex:1}}>
+        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:18,color:"#3FB950",letterSpacing:.5}}>Bewijs van Levering</div>
+        <div style={{fontSize:11,color:"#8B949E"}}>{z.zending_code}</div>
+      </div>
+    </div>
+    <div style={{flex:1,overflowY:"auto",padding:16,display:"flex",flexDirection:"column",gap:14}}>
+      <div style={{background:"#161B22",border:"1px solid #21262D",borderRadius:4,padding:14}}>
+        <div style={{fontSize:11,color:"#8B949E",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Naam ontvanger *</div>
+        <input style={{width:"100%",background:"#0D1117",border:"1px solid #30363D",borderRadius:2,color:"#E6EDF3",padding:"11px 12px",fontSize:15,outline:"none",fontFamily:"'DM Sans',sans-serif"}}
+          value={ontvanger} onChange={e=>setOntvanger(e.target.value)} placeholder="Wie heeft het pakket ontvangen?"/>
+      </div>
+      <div style={{background:"#161B22",border:"1px solid #21262D",borderRadius:4,padding:14}}>
+        <div style={{fontSize:11,color:"#8B949E",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Foto bewijs</div>
+        {fotoPreview
+          ?<div style={{position:"relative"}}>
+            <img src={fotoPreview} style={{width:"100%",borderRadius:2,maxHeight:200,objectFit:"cover"}}/>
+            <button onClick={()=>{setFoto(null);setFotoPreview(null);}} style={{position:"absolute",top:8,right:8,background:"#f01e2c",border:"none",color:"#fff",width:28,height:28,borderRadius:2,fontSize:14,cursor:"pointer"}}>X</button>
+          </div>
+          :<label style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:8,padding:24,border:"2px dashed #30363D",borderRadius:2,cursor:"pointer",color:"#8B949E"}}>
+            <span style={{fontSize:32}}>📷</span>
+            <span style={{fontSize:13}}>Tik om foto te maken</span>
+            <input type="file" accept="image/*" capture="environment" onChange={handleFoto} style={{display:"none"}}/>
+          </label>
+        }
+      </div>
+      <div style={{background:"#161B22",border:"1px solid #21262D",borderRadius:4,padding:14}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+          <div style={{fontSize:11,color:"#8B949E",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.07em"}}>Handtekening</div>
+          {handtekening&&<button onClick={clearCanvas} style={{background:"transparent",border:"1px solid #30363D",borderRadius:2,color:"#8B949E",padding:"3px 8px",fontSize:11,cursor:"pointer"}}>Wissen</button>}
+        </div>
+        <div style={{border:"1px solid #30363D",borderRadius:2,background:"#0D1117",touchAction:"none"}}>
+          <canvas ref={canvasRef} width={480} height={150} style={{width:"100%",height:150,display:"block",borderRadius:2}}
+            onMouseDown={startDraw} onMouseMove={draw} onMouseUp={endDraw}
+            onTouchStart={startDraw} onTouchMove={draw} onTouchEnd={endDraw}/>
+        </div>
+        <div style={{fontSize:11,color:"#484F58",marginTop:6,textAlign:"center"}}>Laat de ontvanger hier tekenen</div>
+      </div>
+      {err&&<div style={{background:"#2a0408",border:"1px solid #f01e2c",borderRadius:2,padding:"10px 14px",color:"#f01e2c",fontSize:13}}>{err}</div>}
+    </div>
+    <div style={{padding:"12px 16px",background:"#111",borderTop:"1px solid #21262D",flexShrink:0,paddingBottom:"max(12px,env(safe-area-inset-bottom))"}}>
+      <button onClick={save} disabled={saving} style={{width:"100%",background:"#3FB950",color:"#fff",border:"none",borderRadius:4,padding:"16px",fontSize:16,fontWeight:700,fontFamily:"'DM Sans',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+        {saving?"Opslaan...":"Afgeleverd bevestigen"}
+      </button>
+    </div>
+  </div>
+}
+
 // ── DETAIL ────────────────────────────────────────────────────────────────────
 function RitDetail({z,onClose,onRefresh,chauffeur}){
   const [loading,setLoading]=React.useState(false);
