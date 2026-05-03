@@ -235,7 +235,7 @@ function PODScreen({z,chauffeur,onDone,onClose}){
   async function uploadFoto(file){
     const ext=file.name?file.name.split(".").pop():"jpg";
     const path=z.id+"/"+Date.now()+"."+ext;
-    const res=await fetch(SUPA_URL+"/storage/v1/object/pod-fotos/"+path,{
+    const res=await fetch(SUPA_URL+"/storage/v1/object/POD-fotos/"+path,{
       method:"POST",
       headers:{
         "apikey":KEY,
@@ -249,7 +249,7 @@ function PODScreen({z,chauffeur,onDone,onClose}){
       const err=await res.text();
       throw new Error("Upload mislukt: "+err);
     }
-    return SUPA_URL+"/storage/v1/object/public/pod-fotos/"+path;
+    return SUPA_URL+"/storage/v1/object/public/POD-fotos/"+path;
   }
 
   async function save(){
