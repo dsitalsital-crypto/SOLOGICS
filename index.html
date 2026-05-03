@@ -337,6 +337,7 @@ function Zendingen({zendingen,chauffeurs,klanten,onRefresh}){
       <Fld l="Naam ontvanger" ch={<input style={S.inp} value={form.ontvanger_naam} onChange={e=>setForm(f=>({...f,ontvanger_naam:e.target.value}))} placeholder="Volledige naam"/>}/>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
         <Fld l="Telefoon ontvanger" ch={<input style={S.inp} value={form.ontvanger_tel} onChange={e=>setForm(f=>({...f,ontvanger_tel:e.target.value}))}/>}/>
+        <Fld l="Email ontvanger" ch={<input style={S.inp} type="email" value={form.ontvanger_email} onChange={e=>setForm(f=>({...f,ontvanger_email:e.target.value}))} placeholder="klant@email.com"/>}/>
         <Fld l="District" ch={<select style={S.sel} value={form.district} onChange={e=>setForm(f=>({...f,district:e.target.value}))}>{DISTRICTS.map(d=><option key={d} value={d}>{d}</option>)}</select>}/>
       </div>
       <Fld l="Ophaaladres" ch={<input style={S.inp} value={form.ophaaladres} onChange={e=>setForm(f=>({...f,ophaaladres:e.target.value}))} placeholder="Adres van afhalen"/>}/>
