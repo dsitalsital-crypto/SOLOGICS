@@ -357,31 +357,68 @@ function Zendingen({zendingen,chauffeurs,klanten,onRefresh}){
         // Try sheet 2 first (Meerdere Leveringen), then sheet 1
         const sheetName=wb.SheetNames.length>1?wb.SheetNames[1]:wb.SheetNames[0];
         const ws=wb.Sheets[sheetName];
-        const json=XLSX.utils.sheet_to_json(ws,{defval:""});
-        rows=json.map(r=>{
-          const keys=Object.keys(r).map(k=>k.toLowerCase());
+        // Sheet 2: skip first instructie rij, headers op rij 2
+        // Sheet 1: formulier stijl, lees veld-waarde paren
+        let json=[];
+        if(sheetName===wb.SheetNames[0]){
+          // Sheet 1 - formulier stijl: kolom A = label, kolom B = waarde
+          const arr=XLSX.utils.sheet_to_json(ws,{header:1,defval:""});
+          const obj={};
+          arr.forEach(row=>{
+            if(row[0]&&row[1]!==undefined&&row[1]!==""){
+              obj[String(row[0]).toLowerCase()]=String(row[1]);
+            }
+          });
           const get=(...names)=>{
             for(const n of names){
-              const k=keys.find(k=>k.includes(n));
-              if(k)return String(r[Object.keys(r)[keys.indexOf(k)]]||"").trim();
+              const k=Object.keys(obj).find(k=>k.includes(n));
+              if(k)return obj[k].trim();
             }
             return "";
           };
-          return {
+          const r={
             naam:get("naam","name"),
-            adres:get("aflever","adres","address"),
-            telefoon:get("telefoon","tel","phone"),
-            email:get("email","mail"),
+            adres:get("aflever","adres"),
+            telefoon:get("telefoon","tel"),
+            email:get("email"),
             pakket:get("pakket","type"),
-            gewicht:get("gewicht","weight","kg"),
+            gewicht:get("gewicht","kg"),
             cod:get("cod","remb")||"0",
             district:get("district","wijk")||"Paramaribo",
             diensttype:get("dienst","service")||"standaard",
-            betaler:get("betaler","payer")||"afzender",
-            betaalmethode:get("methode","payment")||"pos",
-            notities:get("notit","note","opmerking"),
+            betaler:get("betaler")||"afzender",
+            betaalmethode:get("methode","betaal")||"pos",
+            notities:get("notit","note"),
           };
-        }).filter(r=>r.adres&&r.adres!=="Afleveradres *"&&!r.adres.includes("Harekrishnaweg 7"));
+          if(r.adres)rows=[r];
+        } else {
+          // Sheet 2 - tabel stijl: skip rij 1 (instructie), headers op rij 2
+          json=XLSX.utils.sheet_to_json(ws,{defval:"",range:1});
+          rows=json.map(r=>{
+            const keys=Object.keys(r).map(k=>k.toLowerCase());
+            const get=(...names)=>{
+              for(const n of names){
+                const k=keys.find(k=>k.includes(n));
+                if(k)return String(r[Object.keys(r)[keys.indexOf(k)]]||"").trim();
+              }
+              return "";
+            };
+            return {
+              naam:get("naam","name"),
+              adres:get("aflever","adres","address"),
+              telefoon:get("telefoon","tel","phone"),
+              email:get("email","mail"),
+              pakket:get("pakket","type"),
+              gewicht:get("gewicht","weight","kg"),
+              cod:get("cod","remb")||"0",
+              district:get("district","wijk")||"Paramaribo",
+              diensttype:get("dienst","service")||"standaard",
+              betaler:get("betaler","payer")||"afzender",
+              betaalmethode:get("methode","payment")||"pos",
+              notities:get("notit","note","opmerking"),
+            };
+          }).filter(r=>r.adres&&r.adres!=="Afleveradres *"&&r.naam!=="Jan Jansen"&&r.naam!=="Maria Doe");
+        }
       } else {
         const text=ev.target.result;
         const lines=text.split("\n").filter(l=>l.trim());
