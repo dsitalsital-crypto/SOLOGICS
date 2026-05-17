@@ -34,6 +34,28 @@ button{-webkit-tap-highlight-color:transparent}
 
 const SUPA_URL="https://bvnyzxusfiloaivvhlnn.supabase.co";
 const KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ2bnl6eHVzZmlsb2FpdnZobG5uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2NjAzMjcsImV4cCI6MjA5MzIzNjMyN30.uT4KjSUxK9rwINGRktVcUgu3vdwvuoQ3lEFfccfJTQY";
+const MAPS_KEY="AIzaSyAAljdqj-5DtidkaQG2pDgBnpHHGSB-QKU";
+const START_ADRES="Marowijnestraat 84a, Paramaribo, Suriname";
+const START_BEDRAG=55;
+const PRIJS_PER_KM=10;
+
+async function berekenPrijs(afleveradres){
+  try{
+    const origin=encodeURIComponent(START_ADRES);
+    const dest=encodeURIComponent(afleveradres+", Suriname");
+    const url=`https://maps.googleapis.com/maps/api/distancematrix/json?origins=${origin}&destinations=${dest}&key=${MAPS_KEY}&units=metric`;
+    const r=await fetch(url);
+    const d=await r.json();
+    if(d.rows&&d.rows[0]&&d.rows[0].elements&&d.rows[0].elements[0].status==="OK"){
+      const km=d.rows[0].elements[0].distance.value/1000;
+      const prijs=START_BEDRAG+(km*PRIJS_PER_KM);
+      return {km:Math.round(km*10)/10,prijs:Math.round(prijs)};
+    }
+    return null;
+  }catch(e){
+    return null;
+  }
+}
 async function db(path,o={}){
   const sep=path.includes("?") ? "&" : "?";
   const url=SUPA_URL+"/rest/v1"+path+sep+"apikey="+KEY;
@@ -228,8 +250,22 @@ function Zendingen({zendingen,chauffeurs,klanten,onRefresh}){
     klant_id:"",ontvanger_naam:"",ontvanger_tel:"",ontvanger_email:"",
     ophaaladres:"",afleveradres:"",district:"Paramaribo",
     pakkettype:"",gewicht_kg:"",diensttype:"standaard",
-    cod_bedrag:"",chauffeur_id:"",notities:""
+    cod_bedrag:"",chauffeur_id:"",notities:"",
+    betaler:"afzender",betaalmethode:"pos"
   });
+  const [prijsInfo,setPrijsInfo]=React.useState(null);
+  const [berekenend,setBerekenend]=React.useState(false);
+
+  async function updateAfleveradres(adres){
+    setForm(f=>({...f,afleveradres:adres}));
+    if(adres.length>5){
+      setBerekenend(true);
+      const p=await berekenPrijs(adres);
+      setPrijsInfo(p);
+      if(p)setForm(f=>({...f,afleveradres:adres,prijs_srd:p.prijs,afstand_km:p.km}));
+      setBerekenend(false);
+    }
+  }
 
   const filtered=zendingen.filter(z=>{
     const mf=filter==="alle"||z.status===filter;
@@ -248,6 +284,8 @@ function Zendingen({zendingen,chauffeurs,klanten,onRefresh}){
           cod_bedrag:parseFloat(form.cod_bedrag)||0,
           klant_id:form.klant_id||null,
           chauffeur_id:form.chauffeur_id||null,
+          prijs_srd:prijsInfo?prijsInfo.prijs:null,
+          afstand_km:prijsInfo?prijsInfo.km:null,
           zending_code:""
         })});
       }catch(e){
@@ -257,7 +295,7 @@ function Zendingen({zendingen,chauffeurs,klanten,onRefresh}){
         }
       }
       setShowNew(false);
-      setForm({klant_id:"",ontvanger_naam:"",ontvanger_tel:"",ontvanger_email:"",ophaaladres:"",afleveradres:"",district:"Paramaribo",pakkettype:"",gewicht_kg:"",diensttype:"standaard",cod_bedrag:"",chauffeur_id:"",notities:""});
+      setForm({klant_id:"",ontvanger_naam:"",ontvanger_tel:"",ontvanger_email:"",ophaaladres:"",afleveradres:"",district:"Paramaribo",pakkettype:"",gewicht_kg:"",diensttype:"standaard",cod_bedrag:"",chauffeur_id:"",notities:"",betaler:"afzender",betaalmethode:"pos"});setPrijsInfo(null);
       onRefresh();
     }catch(e){setErr(e.message);}
     setSaving(false);
@@ -307,6 +345,7 @@ function Zendingen({zendingen,chauffeurs,klanten,onRefresh}){
             <th style={S.th} className="hide-mob">District</th>
             <th style={S.th} className="hide-mob">Chauffeur</th>
             <th style={S.th} className="hide-mob">COD</th>
+            <th style={S.th} className="hide-mob">Prijs</th>
             <th style={S.th}>Status</th>
             <th style={S.th}></th>
           </tr>
@@ -321,6 +360,7 @@ function Zendingen({zendingen,chauffeurs,klanten,onRefresh}){
               <td style={{...S.td,color:"#8B949E"}} className="hide-mob">{z.district||"—"}</td>
               <td style={{...S.td,color:"#8B949E"}} className="hide-mob">{ch?.naam||<span style={{color:"#f01e2c",fontSize:11}}>⚠ Geen</span>}</td>
               <td style={S.td} className="hide-mob">{z.cod_bedrag>0?<span style={{color:"#D29922",fontWeight:600}}>SRD {z.cod_bedrag}</span>:"—"}</td>
+              <td style={S.td} className="hide-mob">{z.prijs_srd?<span style={{color:"#3FB950",fontWeight:600}}>SRD {z.prijs_srd}</span>:"—"}</td>
               <td style={S.td}><Bdg status={z.status} short/></td>
               <td style={S.td} onClick={e=>e.stopPropagation()}><button style={{...S.btnGhost,padding:"3px 8px"}} onClick={()=>del(z.id)}>✕</button></td>
             </tr>
@@ -341,13 +381,22 @@ function Zendingen({zendingen,chauffeurs,klanten,onRefresh}){
         <Fld l="District" ch={<select style={S.sel} value={form.district} onChange={e=>setForm(f=>({...f,district:e.target.value}))}>{DISTRICTS.map(d=><option key={d} value={d}>{d}</option>)}</select>}/>
       </div>
       <Fld l="Ophaaladres" ch={<input style={S.inp} value={form.ophaaladres} onChange={e=>setForm(f=>({...f,ophaaladres:e.target.value}))} placeholder="Adres van afhalen"/>}/>
-      <Fld l="Afleveradres *" ch={<input style={S.inp} value={form.afleveradres} onChange={e=>setForm(f=>({...f,afleveradres:e.target.value}))} placeholder="Adres van bezorgen"/>}/>
+      <Fld l="Afleveradres *" ch={<input style={S.inp} value={form.afleveradres} onChange={e=>updateAfleveradres(e.target.value)} placeholder="Adres van bezorgen"/>}/>
+      {berekenend&&<div style={{fontSize:12,color:"#8B949E",marginBottom:8}}>⏳ Prijs berekenen...</div>}
+      {prijsInfo&&<div style={{background:"#112D24",border:"1px solid #3FB950",borderRadius:2,padding:"10px 12px",marginBottom:10,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <div style={{fontSize:12,color:"#3FB950"}}>📍 {prijsInfo.km} km van Marowijnestraat 84a</div>
+        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:20,color:"#3FB950"}}>SRD {prijsInfo.prijs}</div>
+      </div>}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
         <Fld l="Pakkettype" ch={<input style={S.inp} value={form.pakkettype} onChange={e=>setForm(f=>({...f,pakkettype:e.target.value}))} placeholder="Doos, tas..."/>}/>
         <Fld l="Gewicht (kg)" ch={<input style={S.inp} type="number" value={form.gewicht_kg} onChange={e=>setForm(f=>({...f,gewicht_kg:e.target.value}))}/>}/>
         <Fld l="COD bedrag (SRD)" ch={<input style={S.inp} type="number" value={form.cod_bedrag} onChange={e=>setForm(f=>({...f,cod_bedrag:e.target.value}))} placeholder="0"/>}/>
       </div>
       <Fld l="Chauffeur" ch={<select style={S.sel} value={form.chauffeur_id} onChange={e=>setForm(f=>({...f,chauffeur_id:e.target.value}))}><option value="">Later toewijzen</option>{chauffeurs.filter(c=>c.actief).map(c=><option key={c.id} value={c.id}>{c.naam} — {c.voertuig||"?"}</option>)}</select>}/>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <Fld l="Wie betaalt?" ch={<select style={S.sel} value={form.betaler} onChange={e=>setForm(f=>({...f,betaler:e.target.value}))}><option value="afzender">Afzender</option><option value="ontvanger">Ontvanger</option></select>}/>
+        <Fld l="Betaalmethode" ch={<select style={S.sel} value={form.betaalmethode} onChange={e=>setForm(f=>({...f,betaalmethode:e.target.value}))}><option value="pos">POS</option><option value="giraal">Giraal</option><option value="cash">Cash</option></select>}/>
+      </div>
       <Fld l="Notities" ch={<textarea style={{...S.inp,height:60,resize:"vertical"}} value={form.notities} onChange={e=>setForm(f=>({...f,notities:e.target.value}))}/>}/>
       {err&&<div style={{color:"#f01e2c",fontSize:12,marginBottom:10}}>{err}</div>}
       <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
@@ -367,7 +416,7 @@ function Zendingen({zendingen,chauffeurs,klanten,onRefresh}){
           ["Afleveradres",detail.afleveradres],
           ["Pakket",detail.pakkettype||"—"],
           ["Gewicht",detail.gewicht_kg?`${detail.gewicht_kg} kg`:"—"],
-          ["COD",detail.cod_bedrag>0?`SRD ${detail.cod_bedrag}`:"—"],
+          ["COD",detail.cod_bedrag>0?`SRD ${detail.cod_bedrag}`:"—"],["Prijs",detail.prijs_srd?`SRD ${detail.prijs_srd} (${detail.afstand_km} km)`:"—"],["Betaler",detail.betaler||"—"],["Betaalmethode",detail.betaalmethode||"—"],
           ["COD ontvangen",detail.cod_ontvangen?"Ja":"Nee"],
           ["Aangemaakt",fd(detail.aangemaakt_op)],
           ["Notities",detail.notities||"—"],
