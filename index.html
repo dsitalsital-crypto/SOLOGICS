@@ -256,6 +256,10 @@ function Zendingen({zendingen,chauffeurs,klanten,onRefresh}){
   const [detail,setDetail]=React.useState(null);
   const [saving,setSaving]=React.useState(false);
   const [err,setErr]=React.useState("");
+  const [showBulk,setShowBulk]=React.useState(false);
+  const [bulkData,setBulkData]=React.useState([]);
+  const [bulkLoading,setBulkLoading]=React.useState(false);
+  const [bulkDone,setBulkDone]=React.useState(0);
   const [form,setForm]=React.useState({
     klant_id:"",ontvanger_naam:"",ontvanger_tel:"",ontvanger_email:"",
     ophaaladres:"",afleveradres:"",district:"Paramaribo",
@@ -332,10 +336,84 @@ function Zendingen({zendingen,chauffeurs,klanten,onRefresh}){
     onRefresh();setDetail(null);
   }
 
+  function downloadTemplate(){
+    const csv="Naam,Afleveradres,Telefoonnummer,Email,Pakkettype,Gewicht_kg,COD_bedrag,District\nJan Jansen,Harekrishnaweg 7 Paramaribo,5971234567,jan@email.com,Doos,2.5,0,Paramaribo\nMaria Doe,Domineestraat 12 Paramaribo,5979876543,,Tas,1.0,150,Paramaribo";
+    const blob=new Blob([csv],{type:"text/csv"});
+    const a=document.createElement("a");
+    a.href=URL.createObjectURL(blob);
+    a.download="sologics_template.csv";
+    a.click();
+  }
+
+  function handleBulkFile(e){
+    const file=e.target.files[0];
+    if(!file)return;
+    const reader=new FileReader();
+    reader.onload=ev=>{
+      const text=ev.target.result;
+      const lines=text.split("\n").filter(l=>l.trim());
+      const headers=lines[0].split(",").map(h=>h.trim().toLowerCase());
+      const rows=lines.slice(1).map(line=>{
+        const vals=line.split(",").map(v=>v.trim().replace(/^"|"$/g,""));
+        const obj={};
+        headers.forEach((h,i)=>{obj[h]=vals[i]||"";});
+        return {
+          naam:obj.naam||obj.name||"",
+          adres:obj.afleveradres||obj.adres||obj.address||"",
+          telefoon:obj.telefoonnummer||obj.telefoon||obj.tel||"",
+          email:obj.email||"",
+          pakket:obj.pakkettype||obj.pakket||"",
+          gewicht:obj.gewicht_kg||obj.gewicht||"",
+          cod:obj.cod_bedrag||obj.cod||"0",
+          district:obj.district||"Paramaribo",
+        };
+      }).filter(r=>r.adres);
+      setBulkData(rows);
+    };
+    reader.readAsText(file);
+  }
+
+  async function saveBulk(){
+    setBulkLoading(true);setBulkDone(0);
+    for(let i=0;i<bulkData.length;i++){
+      const r=bulkData[i];
+      try{
+        // Bereken prijs
+        let prijs_srd=null,afstand_km=null;
+        if(r.adres){
+          const p=await berekenPrijs(r.adres);
+          if(p){prijs_srd=p.prijs;afstand_km=p.km;}
+        }
+        await db("/zendingen",{method:"POST",headers:{Prefer:"return=representation"},body:JSON.stringify({
+          ontvanger_naam:r.naam,
+          afleveradres:r.adres,
+          ontvanger_tel:r.telefoon,
+          ontvanger_email:r.email,
+          pakkettype:r.pakket,
+          gewicht_kg:r.gewicht||null,
+          cod_bedrag:parseFloat(r.cod)||0,
+          district:r.district||"Paramaribo",
+          diensttype:"standaard",
+          betaler:"afzender",
+          betaalmethode:"pos",
+          prijs_srd,afstand_km,
+          zending_code:""
+        })});
+        setBulkDone(i+1);
+      }catch(e){console.log("Rij fout:",e);}
+    }
+    setBulkLoading(false);
+    setShowBulk(false);setBulkData([]);setBulkDone(0);
+    onRefresh();
+  }
+
   return <div style={{display:"flex",flexDirection:"column",gap:14}}>
     <div className="page-head" style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
       <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:26,letterSpacing:1}}>Zendingen</div>
-      <button style={S.btn} onClick={()=>setShowNew(true)}>+ Nieuwe zending</button>
+      <div style={{display:"flex",gap:8}}>
+        <button style={{...S.btnGhost,fontSize:12}} onClick={()=>setShowBulk(true)}>📊 Bulk upload</button>
+        <button style={S.btn} onClick={()=>setShowNew(true)}>+ Nieuwe zending</button>
+      </div>
     </div>
 
     <input style={S.inp} placeholder="Zoek op code, ontvanger, adres, district..." value={search} onChange={e=>setSearch(e.target.value)}/>
@@ -459,6 +537,53 @@ function Zendingen({zendingen,chauffeurs,klanten,onRefresh}){
         <button style={{...S.btnGhost,color:"#f01e2c",borderColor:"#f01e2c"}} onClick={()=>del(detail.id)}>Verwijderen</button>
         <button style={S.btn} onClick={()=>downloadInvoice(detail)}>📄 Download Invoice</button>
       </div>
+    </Modal>}
+
+    {showBulk&&<Modal title="Bulk Upload" onClose={()=>{setShowBulk(false);setBulkData([]);setBulkDone(0);}}>
+      <div style={{marginBottom:16}}>
+        <div style={{fontSize:13,color:"#C9D1D9",marginBottom:12}}>
+          Upload een Excel of CSV bestand met meerdere leveringen tegelijk.
+        </div>
+        <button onClick={downloadTemplate} style={{...S.btnGhost,marginBottom:14,width:"100%",justifyContent:"center"}}>
+          📥 Download Excel Template
+        </button>
+        <label style={{display:"block",border:"2px dashed #30363D",borderRadius:2,padding:"20px",textAlign:"center",cursor:"pointer",color:"#8B949E",fontSize:13}}>
+          📊 Klik om CSV/Excel te uploaden
+          <input type="file" accept=".csv,.xlsx,.xls" onChange={handleBulkFile} style={{display:"none"}}/>
+        </label>
+      </div>
+
+      {bulkData.length>0&&<div>
+        <div style={{fontSize:12,color:"#3FB950",marginBottom:10,fontWeight:600}}>✓ {bulkData.length} leveringen gevonden</div>
+        <div style={S.tw}>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+            <thead style={{background:"#0D1117"}}>
+              <tr>
+                {["Naam","Adres","Tel","Email","Pakket","Gewicht","COD"].map(h=><th key={h} style={{...S.th,padding:"7px 8px"}}>{h}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {bulkData.slice(0,5).map((r,i)=><tr key={i}>
+                <td style={{...S.td,padding:"6px 8px",fontSize:11}}>{r.naam||"—"}</td>
+                <td style={{...S.td,padding:"6px 8px",fontSize:11,maxWidth:100,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.adres||"—"}</td>
+                <td style={{...S.td,padding:"6px 8px",fontSize:11}}>{r.telefoon||"—"}</td>
+                <td style={{...S.td,padding:"6px 8px",fontSize:11}}>{r.email||"—"}</td>
+                <td style={{...S.td,padding:"6px 8px",fontSize:11}}>{r.pakket||"—"}</td>
+                <td style={{...S.td,padding:"6px 8px",fontSize:11}}>{r.gewicht||"—"}</td>
+                <td style={{...S.td,padding:"6px 8px",fontSize:11}}>{r.cod||"0"}</td>
+              </tr>)}
+              {bulkData.length>5&&<tr><td colSpan={7} style={{...S.td,color:"#8B949E",textAlign:"center",fontSize:11}}>...en nog {bulkData.length-5} meer</td></tr>}
+            </tbody>
+          </table>
+        </div>
+        {bulkDone>0&&<div style={{color:"#3FB950",fontSize:12,margin:"10px 0"}}>✓ {bulkDone} van {bulkData.length} verwerkt...</div>}
+        <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:14}}>
+          <button style={S.btnGhost} onClick={()=>{setBulkData([]);setBulkDone(0);}}>Wissen</button>
+          <button style={S.btn} onClick={saveBulk} disabled={bulkLoading}>
+            {bulkLoading?`Bezig... ${bulkDone}/${bulkData.length}`:`Importeer ${bulkData.length} leveringen`}
+          </button>
+        </div>
+      </div>}
     </Modal>}
   </div>
 }
