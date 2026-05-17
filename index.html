@@ -8,6 +8,7 @@
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:#0D1117;font-family:'DM Sans',sans-serif;color:#E6EDF3;overflow-x:hidden}
@@ -346,29 +347,69 @@ function Zendingen({zendingen,chauffeurs,klanten,onRefresh}){
   function handleBulkFile(e){
     const file=e.target.files[0];
     if(!file)return;
+    const isExcel=file.name.endsWith(".xlsx")||file.name.endsWith(".xls");
     const reader=new FileReader();
     reader.onload=ev=>{
-      const text=ev.target.result;
-      const lines=text.split("\n").filter(l=>l.trim());
-      const headers=lines[0].split(",").map(h=>h.trim().toLowerCase());
-      const rows=lines.slice(1).map(line=>{
-        const vals=line.split(",").map(v=>v.trim().replace(/^"|"$/g,""));
-        const obj={};
-        headers.forEach((h,i)=>{obj[h]=vals[i]||"";});
-        return {
-          naam:obj.naam||obj.name||"",
-          adres:obj.afleveradres||obj.adres||obj.address||"",
-          telefoon:obj.telefoonnummer||obj.telefoon||obj.tel||"",
-          email:obj.email||"",
-          pakket:obj.pakkettype||obj.pakket||"",
-          gewicht:obj.gewicht_kg||obj.gewicht||"",
-          cod:obj.cod_bedrag||obj.cod||"0",
-          district:obj.district||"Paramaribo",
-        };
-      }).filter(r=>r.adres);
+      let rows=[];
+      if(isExcel){
+        const data=new Uint8Array(ev.target.result);
+        const wb=XLSX.read(data,{type:"array"});
+        // Try sheet 2 first (Meerdere Leveringen), then sheet 1
+        const sheetName=wb.SheetNames.length>1?wb.SheetNames[1]:wb.SheetNames[0];
+        const ws=wb.Sheets[sheetName];
+        const json=XLSX.utils.sheet_to_json(ws,{defval:""});
+        rows=json.map(r=>{
+          const keys=Object.keys(r).map(k=>k.toLowerCase());
+          const get=(...names)=>{
+            for(const n of names){
+              const k=keys.find(k=>k.includes(n));
+              if(k)return String(r[Object.keys(r)[keys.indexOf(k)]]||"").trim();
+            }
+            return "";
+          };
+          return {
+            naam:get("naam","name"),
+            adres:get("aflever","adres","address"),
+            telefoon:get("telefoon","tel","phone"),
+            email:get("email","mail"),
+            pakket:get("pakket","type"),
+            gewicht:get("gewicht","weight","kg"),
+            cod:get("cod","remb")||"0",
+            district:get("district","wijk")||"Paramaribo",
+            diensttype:get("dienst","service")||"standaard",
+            betaler:get("betaler","payer")||"afzender",
+            betaalmethode:get("methode","payment")||"pos",
+            notities:get("notit","note","opmerking"),
+          };
+        }).filter(r=>r.adres&&r.adres!=="Afleveradres *"&&!r.adres.includes("Harekrishnaweg 7"));
+      } else {
+        const text=ev.target.result;
+        const lines=text.split("\n").filter(l=>l.trim());
+        const headers=lines[0].split(",").map(h=>h.trim().toLowerCase());
+        rows=lines.slice(1).map(line=>{
+          const vals=line.split(",").map(v=>v.trim().replace(/^"|"$/g,""));
+          const obj={};
+          headers.forEach((h,i)=>{obj[h]=vals[i]||"";});
+          return {
+            naam:obj.naam||obj.name||"",
+            adres:obj.afleveradres||obj.adres||"",
+            telefoon:obj.telefoonnummer||obj.telefoon||"",
+            email:obj.email||"",
+            pakket:obj.pakkettype||obj.pakket||"",
+            gewicht:obj.gewicht_kg||obj.gewicht||"",
+            cod:obj.cod_bedrag||obj.cod||"0",
+            district:obj.district||"Paramaribo",
+            diensttype:obj.diensttype||"standaard",
+            betaler:obj.betaler||"afzender",
+            betaalmethode:obj.betaalmethode||"pos",
+            notities:obj.notities||"",
+          };
+        }).filter(r=>r.adres);
+      }
       setBulkData(rows);
     };
-    reader.readAsText(file);
+    if(isExcel) reader.readAsArrayBuffer(file);
+    else reader.readAsText(file);
   }
 
   async function saveBulk(){
