@@ -39,6 +39,19 @@ const START_ADRES="Marowijnestraat 84a, Paramaribo, Suriname";
 const START_BEDRAG=55;
 const PRIJS_PER_KM=10;
 
+async function downloadInvoice(z){
+  const res=await fetch(SUPA_URL+"/functions/v1/genereer-invoice",{
+    method:"POST",
+    headers:{apikey:KEY,Authorization:"Bearer "+KEY,"Content-Type":"application/json"},
+    body:JSON.stringify(z)
+  });
+  const html=await res.text();
+  const win=window.open("","_blank");
+  win.document.write(html);
+  win.document.close();
+  setTimeout(()=>win.print(),500);
+}
+
 async function berekenPrijs(afleveradres){
   try{
     const r=await fetch(SUPA_URL+"/functions/v1/bereken-prijs",{
@@ -442,8 +455,9 @@ function Zendingen({zendingen,chauffeurs,klanten,onRefresh}){
           </button>)}
         </div>
       </div>
-      <div style={{display:"flex",justifyContent:"flex-end",marginTop:14}}>
+      <div style={{display:"flex",justifyContent:"space-between",marginTop:14}}>
         <button style={{...S.btnGhost,color:"#f01e2c",borderColor:"#f01e2c"}} onClick={()=>del(detail.id)}>Verwijderen</button>
+        <button style={S.btn} onClick={()=>downloadInvoice(detail)}>📄 Download Invoice</button>
       </div>
     </Modal>}
   </div>
