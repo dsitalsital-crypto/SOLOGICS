@@ -337,11 +337,9 @@ function Zendingen({zendingen,chauffeurs,klanten,onRefresh}){
   }
 
   function downloadTemplate(){
-    const csv="Naam,Afleveradres,Telefoonnummer,Email,Pakkettype,Gewicht_kg,COD_bedrag,District\nJan Jansen,Harekrishnaweg 7 Paramaribo,5971234567,jan@email.com,Doos,2.5,0,Paramaribo\nMaria Doe,Domineestraat 12 Paramaribo,5979876543,,Tas,1.0,150,Paramaribo";
-    const blob=new Blob([csv],{type:"text/csv"});
     const a=document.createElement("a");
-    a.href=URL.createObjectURL(blob);
-    a.download="sologics_template.csv";
+    a.href="https://dsitalsital-crypto.github.io/SOLOGICS/sologics_template.xlsx";
+    a.download="sologics_template.xlsx";
     a.click();
   }
 
