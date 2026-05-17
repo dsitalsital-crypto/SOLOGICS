@@ -41,16 +41,13 @@ const PRIJS_PER_KM=10;
 
 async function berekenPrijs(afleveradres){
   try{
-    const origin=encodeURIComponent(START_ADRES);
-    const dest=encodeURIComponent(afleveradres+", Suriname");
-    const url=`https://maps.googleapis.com/maps/api/distancematrix/json?origins=${origin}&destinations=${dest}&key=${MAPS_KEY}&units=metric`;
-    const r=await fetch(url);
+    const r=await fetch(SUPA_URL+"/functions/v1/bereken-prijs",{
+      method:"POST",
+      headers:{apikey:KEY,Authorization:"Bearer "+KEY,"Content-Type":"application/json"},
+      body:JSON.stringify({afleveradres})
+    });
     const d=await r.json();
-    if(d.rows&&d.rows[0]&&d.rows[0].elements&&d.rows[0].elements[0].status==="OK"){
-      const km=d.rows[0].elements[0].distance.value/1000;
-      const prijs=START_BEDRAG+(km*PRIJS_PER_KM);
-      return {km:Math.round(km*10)/10,prijs:Math.round(prijs)};
-    }
+    if(d.ok)return {km:d.km,prijs:d.prijs};
     return null;
   }catch(e){
     return null;
