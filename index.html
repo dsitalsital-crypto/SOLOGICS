@@ -895,14 +895,37 @@ function AdminLogin({onLogin}){
   const [pass,setPass]=React.useState("");
   const [err,setErr]=React.useState("");
   const [show,setShow]=React.useState(false);
+  const [loading,setLoading]=React.useState(false);
 
-  function login(){
-    if(user===ADMIN_USER&&pass===ADMIN_PASS){
-      sessionStorage.setItem("sl_admin","1");
-      onLogin();
-    } else {
-      setErr("Onjuiste gebruikersnaam of wachtwoord");
+  async function login(){
+    if(!user||!pass){setErr("Vul alle velden in");return;}
+    setLoading(true);setErr("");
+    try{
+      const r=await db(`/gebruikers?gebruikersnaam=eq.${encodeURIComponent(user)}&wachtwoord=eq.${encodeURIComponent(pass)}&actief=eq.true&select=*`);
+      if(r&&r.length>0){
+        sessionStorage.setItem("sl_admin","1");
+        sessionStorage.setItem("sl_gebruiker",JSON.stringify(r[0]));
+        onLogin(r[0]);
+      } else if(user===ADMIN_USER&&pass===ADMIN_PASS){
+        const adminUser={naam:"Admin",gebruikersnaam:"admin",rol:"admin"};
+        sessionStorage.setItem("sl_admin","1");
+        sessionStorage.setItem("sl_gebruiker",JSON.stringify(adminUser));
+        onLogin(adminUser);
+      } else {
+        setErr("Onjuiste gebruikersnaam of wachtwoord");
+      }
+    }catch(e){
+      // Fallback to hardcoded
+      if(user===ADMIN_USER&&pass===ADMIN_PASS){
+        const adminUser={naam:"Admin",gebruikersnaam:"admin",rol:"admin"};
+        sessionStorage.setItem("sl_admin","1");
+        sessionStorage.setItem("sl_gebruiker",JSON.stringify(adminUser));
+        onLogin(adminUser);
+      } else {
+        setErr("Inloggen mislukt: "+e.message);
+      }
     }
+    setLoading(false);
   }
 
   return <div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24,background:"#0D1117"}}>
@@ -1082,10 +1105,103 @@ function Rapportages({zendingen,chauffeurs}){
   </div>
 }
 
+
+// ── GEBRUIKERS ────────────────────────────────────────────────────────────────
+function Gebruikers(){
+  const [gebruikers,setGebruikers]=React.useState([]);
+  const [showNew,setShowNew]=React.useState(false);
+  const [form,setForm]=React.useState({naam:"",gebruikersnaam:"",wachtwoord:"",rol:"dispatcher"});
+  const [saving,setSaving]=React.useState(false);
+
+  React.useEffect(()=>{load();},[]);
+
+  async function load(){
+    const r=await db("/gebruikers?order=aangemaakt_op.asc&select=*");
+    setGebruikers(r||[]);
+  }
+
+  async function save(){
+    if(!form.naam||!form.gebruikersnaam||!form.wachtwoord){return;}
+    setSaving(true);
+    try{
+      await db("/gebruikers",{method:"POST",headers:{Prefer:"return=representation"},body:JSON.stringify(form)});
+      setShowNew(false);setForm({naam:"",gebruikersnaam:"",wachtwoord:"",rol:"dispatcher"});
+      load();
+    }catch(e){alert("Fout: "+e.message);}
+    setSaving(false);
+  }
+
+  async function toggleActief(g){
+    await db(`/gebruikers?id=eq.${g.id}`,{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({actief:!g.actief})});
+    load();
+  }
+
+  const ROL_COLORS={admin:{bg:"#2a0408",color:"#f01e2c"},manager:{bg:"#112d24",color:"#3FB950"},dispatcher:{bg:"#1a2332",color:"#58a6ff"}};
+
+  return <div style={{display:"flex",flexDirection:"column",gap:14}}>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+      <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:26,letterSpacing:1}}>Gebruikers</div>
+      <button style={S.btn} onClick={()=>setShowNew(true)}>+ Nieuwe gebruiker</button>
+    </div>
+
+    <div style={{background:"#161B22",border:"1px solid #21262D",borderRadius:2,overflow:"hidden"}}>
+      <table style={{width:"100%",borderCollapse:"collapse"}}>
+        <thead style={{background:"#0D1117"}}>
+          <tr>{["Naam","Gebruikersnaam","Wachtwoord","Rol","Status",""].map(h=><th key={h} style={{...S.th,padding:"10px 14px"}}>{h}</th>)}</tr>
+        </thead>
+        <tbody>
+          {gebruikers.map(g=><tr key={g.id}>
+            <td style={{...S.td,padding:"12px 14px",fontWeight:600}}>{g.naam}</td>
+            <td style={{...S.td,padding:"12px 14px",color:"#8B949E"}}>{g.gebruikersnaam}</td>
+            <td style={{...S.td,padding:"12px 14px",color:"#8B949E",fontFamily:"monospace"}}>{"•".repeat(g.wachtwoord?.length||4)}</td>
+            <td style={{...S.td,padding:"12px 14px"}}>
+              <span style={{background:ROL_COLORS[g.rol]?.bg||"#21262D",color:ROL_COLORS[g.rol]?.color||"#8B949E",padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:700,textTransform:"uppercase"}}>
+                {g.rol}
+              </span>
+            </td>
+            <td style={{...S.td,padding:"12px 14px"}}>
+              <span style={{color:g.actief?"#3FB950":"#8B949E",fontWeight:600,fontSize:12}}>{g.actief?"Actief":"Inactief"}</span>
+            </td>
+            <td style={{...S.td,padding:"12px 14px"}}>
+              <button onClick={()=>toggleActief(g)} style={{...S.btnGhost,fontSize:11,padding:"4px 10px",color:g.actief?"#f01e2c":"#3FB950",borderColor:g.actief?"#f01e2c":"#3FB950"}}>
+                {g.actief?"Deactiveren":"Activeren"}
+              </button>
+            </td>
+          </tr>)}
+        </tbody>
+      </table>
+    </div>
+
+    {showNew&&<Modal title="Nieuwe gebruiker" onClose={()=>setShowNew(false)}>
+      <div style={{display:"flex",flexDirection:"column",gap:12}}>
+        <Fld l="Naam" ch={<input style={S.inp} value={form.naam} onChange={e=>setForm(f=>({...f,naam:e.target.value}))} placeholder="Volledige naam"/>}/>
+        <Fld l="Gebruikersnaam" ch={<input style={S.inp} value={form.gebruikersnaam} onChange={e=>setForm(f=>({...f,gebruikersnaam:e.target.value}))} placeholder="bijv: jan.jansen"/>}/>
+        <Fld l="Wachtwoord" ch={<input style={S.inp} value={form.wachtwoord} onChange={e=>setForm(f=>({...f,wachtwoord:e.target.value}))} placeholder="Kies een wachtwoord"/>}/>
+        <Fld l="Rol" ch={<select style={S.sel} value={form.rol} onChange={e=>setForm(f=>({...f,rol:e.target.value}))}>
+          <option value="admin">Admin — Volledige toegang</option>
+          <option value="manager">Manager — Beheer + rapportages</option>
+          <option value="dispatcher">Dispatcher — Alleen dispatch</option>
+        </select>}/>
+        <div style={{display:"flex",justifyContent:"flex-end",marginTop:8}}>
+          <button style={S.btn} onClick={save} disabled={saving}>{saving?"Opslaan...":"Aanmaken"}</button>
+        </div>
+      </div>
+    </Modal>}
+  </div>
+}
+
 // ── ROOT ──────────────────────────────────────────────────────────────────────
 function App(){
   const [loggedIn,setLoggedIn]=React.useState(()=>sessionStorage.getItem("sl_admin")==="1");
-  if(!loggedIn)return <AdminLogin onLogin={()=>setLoggedIn(true)}/>;
+  const [gebruiker,setGebruiker]=React.useState(()=>{
+    try{const s=sessionStorage.getItem("sl_gebruiker");return s?JSON.parse(s):{rol:"admin"};}catch(e){return {rol:"admin"};}
+  });
+  const rol=gebruiker?.rol||"admin";
+  const isAdmin=rol==="admin";
+  const isManager=rol==="admin"||rol==="manager";
+  const isDispatcher=rol==="admin"||rol==="manager"||rol==="dispatcher";
+
+  if(!loggedIn)return <AdminLogin onLogin={(g)=>{setLoggedIn(true);if(g)setGebruiker(g);}}/>;
 
   const [page,setPage]=React.useState("dashboard");
   const [zendingen,setZendingen]=React.useState([]);
@@ -1112,13 +1228,14 @@ function App(){
   const open_dispatch=zendingen.filter(z=>!z.chauffeur_id&&!["afgeleverd","voltooid","mislukt"].includes(z.status)).length;
 
   const nav=[
-    {id:"dashboard",icon:"▦",label:"Dashboard"},
-    {id:"zendingen",icon:"↗",label:"Zendingen",badge:zendingen.filter(z=>z.status==="aangemaakt").length},
-    {id:"dispatch",icon:"⊹",label:"Dispatch",badge:open_dispatch},
-    {id:"chauffeurs",icon:"◉",label:"Chauffeurs"},
-    {id:"klanten",icon:"◈",label:"Klanten"},
-    {id:"rapportages",icon:"📊",label:"Rapportages"},
-  ];
+    {id:"dashboard",icon:"▦",label:"Dashboard",show:true},
+    {id:"zendingen",icon:"↗",label:"Zendingen",badge:zendingen.filter(z=>z.status==="aangemaakt").length,show:isDispatcher},
+    {id:"dispatch",icon:"⊹",label:"Dispatch",badge:open_dispatch,show:isDispatcher},
+    {id:"chauffeurs",icon:"◉",label:"Chauffeurs",show:isManager},
+    {id:"klanten",icon:"◈",label:"Klanten",show:isManager},
+    {id:"rapportages",icon:"📊",label:"Rapportages",show:isManager},
+    {id:"gebruikers",icon:"👥",label:"Gebruikers",show:isAdmin},
+  ].filter(n=>n.show);
 
   return <div style={{fontFamily:"'DM Sans',sans-serif",background:"#0D1117",color:"#E6EDF3",minHeight:"100vh",display:"flex",flexDirection:"column"}}>
 
@@ -1159,6 +1276,7 @@ function App(){
             {page==="chauffeurs"&&<Chauffeurs chauffeurs={chauffeurs} zendingen={zendingen} onRefresh={load}/>}
             {page==="klanten"&&<Klanten klanten={klanten} zendingen={zendingen} onRefresh={load}/>}
             {page==="rapportages"&&<Rapportages zendingen={zendingen} chauffeurs={chauffeurs}/>}
+            {page==="gebruikers"&&<Gebruikers/>}
           </>
         }
       </div>
