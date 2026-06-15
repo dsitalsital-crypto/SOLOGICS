@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>SOlogics Invoice</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,sans-serif;color:#111;font-size:12px;background:#e5e5e5}
+.page{max-width:800px;margin:20px auto;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.15)}
+.header{display:flex;justify-content:space-between;align-items:flex-start;padding:14px 20px;border-bottom:2px solid #8B1020}
+.header-right{text-align:right;font-size:11px;color:#555;line-height:1.8}
+.logo{display:flex;flex-direction:column}
+.logo-inner{font-family:Impact,Arial,sans-serif;font-size:30px;line-height:1;display:flex}
+.logo-so{background:#1a1a1a;color:#fff;padding:4px 10px;letter-spacing:1px}
+.logo-logics{background:#8B1020;color:#fff;padding:4px 10px;letter-spacing:3px}
+.logo-tag{font-size:9px;color:#888;letter-spacing:2px;margin-top:4px}
+.doc-title{background:#f5f5f5;padding:7px 20px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #ddd}
+.doc-title h2{font-size:13px;font-weight:bold;letter-spacing:1px}
+.doc-num{font-size:13px;font-weight:bold;color:#8B1020}
+.fields-grid{display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid #ddd}
+.field-row{display:flex;border-bottom:1px solid #eee;font-size:11px}
+.lbl{background:#f5f5f5;padding:5px 10px;font-weight:bold;width:130px;flex-shrink:0;border-right:1px solid #ddd;text-transform:uppercase;font-size:10px;color:#555}
+.val{padding:5px 10px;color:#111}
+.deliver-grid{display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid #ddd}
+.deliver-box{padding:12px 20px;font-size:12px}
+.deliver-box:first-child{border-right:1px solid #ddd}
+.deliver-box h4{font-size:10px;font-weight:bold;text-transform:uppercase;color:#888;margin-bottom:6px;letter-spacing:1px}
+table{width:100%;border-collapse:collapse;font-size:11px}
+thead{background:#8B1020;color:#fff}
+th{padding:7px 10px;text-align:left;font-size:10px;letter-spacing:.5px}
+td{padding:7px 10px;border-bottom:1px solid #eee;vertical-align:top}
+tr:nth-child(even) td{background:#fafafa}
+.total-row td{background:#111!important;color:#fff;font-weight:bold;font-size:13px}
+.total-row td:last-child{color:#f0a0a8}
+.betaal{background:#fff8dc;border-left:4px solid #f0ad4e;padding:10px 20px;font-size:12px;margin:12px 20px}
+.footer{padding:10px 20px;border-top:2px solid #8B1020;font-size:10px;color:#888;text-align:center;line-height:1.8}
+.pod-page{page-break-before:always;max-width:800px;margin:20px auto;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.15)}
+.pod-title{background:#f5f5f5;padding:7px 20px;border-bottom:1px solid #ddd;font-size:13px;font-weight:bold;display:flex;justify-content:space-between}
+.pod-body{padding:20px}
+.pod-row{display:flex;padding:6px 0;border-bottom:1px solid #eee;font-size:12px}
+.pod-lbl{font-weight:bold;width:150px;flex-shrink:0;color:#555;text-transform:uppercase;font-size:10px}
+.sig-photos{display:flex;gap:12px;flex-wrap:wrap;margin-top:12px}
+.print-btn{position:fixed;bottom:20px;right:20px;background:#8B1020;color:#fff;border:none;padding:12px 24px;border-radius:4px;font-size:14px;font-weight:700;cursor:pointer;font-family:Arial,sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.3)}
+.loading{text-align:center;padding:60px;font-size:16px;color:#888}
+@media print{
+  body{background:#fff}
+  .print-btn{display:none}
+  .page,.pod-page{box-shadow:none;margin:0}
+  .pod-page{page-break-before:always}
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
+</style>
+</head>
+<body>
+<div id="root"><div class="loading">Invoice laden...</div></div>
+<button class="print-btn" onclick="window.print()">🖨️ Print / Opslaan als PDF</button>
+
+<script>
+const SUPA_URL="https://bvnyzxusfiloaivvhlnn.supabase.co";
+const KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ2bnl6eHVzZmlsb2FpdnZobG5uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2NjAzMjcsImV4cCI6MjA5MzIzNjMyN30.uT4KjSUxK9rwINGRktVcUgu3vdwvuoQ3lEFfccfJTQY";
+
+async function db(path){
+  const r=await fetch(SUPA_URL+"/rest/v1"+path+"&apikey="+KEY,{headers:{apikey:KEY,Authorization:"Bearer "+KEY}});
+  return r.json();
+}
+
+function fmt(d){return d?new Date(d).toLocaleDateString("nl-NL",{day:"2-digit",month:"long",year:"numeric"}):"—";}
+function fmtdt(d){return d?new Date(d).toLocaleString("nl-NL"):"—";}
+
+const logo=`<div class="logo">
+  <div class="logo-inner">
+    <span class="logo-so">SO</span>
+    <span class="logo-logics">LOGICS</span>
+  </div>
+  <div class="logo-tag">simplify your logistics business</div>
+</div>`;
+
+async function load(){
+  const params=new URLSearchParams(window.location.search);
+  const code=params.get("code");
+  if(!code){
+    document.getElementById("root").innerHTML="<div class='loading'>Geen zending code opgegeven</div>";
+    return;
+  }
+
+  const [zendingen,pods]=await Promise.all([
+    db(`/zendingen?zending_code=eq.${code}&select=*&limit=1`),
+    db(`/pod?zending_id=in.(select id from zendingen where zending_code='${code}')&order=tijdstip.desc&limit=1`)
+  ]);
+
+  if(!zendingen||!zendingen[0]){
+    document.getElementById("root").innerHTML="<div class='loading'>Zending niet gevonden: "+code+"</div>";
+    return;
+  }
+
+  const z=zendingen[0];
+  const pod=pods&&pods[0]?pods[0]:null;
+
+  const betaaldatum=new Date(new Date(z.aangemaakt_op||Date.now()).getTime()+3*24*60*60*1000)
+    .toLocaleDateString("nl-NL",{day:"2-digit",month:"long",year:"numeric"});
+  const afstandKosten=z.afstand_km?(parseFloat(z.afstand_km)*10).toFixed(2):"0.00";
+  const totaal=z.prijs_srd?parseFloat(z.prijs_srd).toFixed(2):"—";
+
+  let html=`<div class="page">
+    <div class="header">${logo}
+      <div class="header-right">
+        <div><strong>sologics.site</strong></div>
+        <div>Marowijnestraat 84a, Paramaribo</div>
+        <div>no-reply@sologics.co</div>
+      </div>
+    </div>
+    <div class="doc-title">
+      <h2>DELIVERY STATUS / INVOICE</h2>
+      <span class="doc-num">D.O. #: ${z.zending_code}</span>
+    </div>
+    <div class="fields-grid">
+      <div>
+        <div class="field-row"><span class="lbl">Status</span><span class="val" style="color:#2a7a2a;font-weight:bold;text-transform:uppercase">${z.status||"—"}</span></div>
+        <div class="field-row"><span class="lbl">Scheduled</span><span class="val">${fmt(z.aangemaakt_op)}</span></div>
+        <div class="field-row"><span class="lbl">Carrier</span><span class="val">SOlogics</span></div>
+        <div class="field-row"><span class="lbl">Diensttype</span><span class="val">${z.diensttype||"standaard"}</span></div>
+        <div class="field-row"><span class="lbl">Gewicht</span><span class="val">${z.gewicht_kg?z.gewicht_kg+" kg":"N/A"}</span></div>
+        <div class="field-row"><span class="lbl">Betaler</span><span class="val">${z.betaler||"afzender"}</span></div>
+      </div>
+      <div>
+        <div class="field-row"><span class="lbl">Betaalmethode</span><span class="val">${z.betaalmethode||"N/A"}</span></div>
+        <div class="field-row"><span class="lbl">Afstand</span><span class="val">${z.afstand_km?z.afstand_km+" km":"N/A"}</span></div>
+        <div class="field-row"><span class="lbl">Starttarief</span><span class="val">SRD 65.00</span></div>
+        <div class="field-row"><span class="lbl">COD bedrag</span><span class="val">${z.cod_bedrag>0?"SRD "+z.cod_bedrag:"N/A"}</span></div>
+        <div class="field-row"><span class="lbl">District</span><span class="val">${z.district||"N/A"}</span></div>
+        <div class="field-row"><span class="lbl">Start datum</span><span class="val">${fmt(z.aangemaakt_op)}</span></div>
+      </div>
+    </div>
+    <div class="deliver-grid">
+      <div class="deliver-box">
+        <h4>Deliver to</h4>
+        <div style="font-size:13px;font-weight:bold">${z.ontvanger_naam||"—"}</div>
+        <div style="color:#555;margin-top:4px;line-height:1.6">${z.afleveradres||""}</div>
+        ${z.ontvanger_tel?`<div style="color:#555">Tel: ${z.ontvanger_tel}</div>`:""}
+      </div>
+      <div class="deliver-box">
+        <h4>Instructions</h4>
+        <div style="color:#555;line-height:1.7">Dear Customer,<br>You are highly appreciated.<br>Simplify your logistics.
+          <div style="border-top:1px solid #ddd;margin-top:8px;padding-top:8px;font-size:11px">
+            Hakrinkbank SRD: 2000.300.31<br>Finabank SRD: 1001966177
+          </div>
+        </div>
+      </div>
+    </div>
+    <table>
+      <thead><tr><th style="width:35px">NO.</th><th>SKU</th><th>DESCRIPTION</th><th style="width:50px;text-align:center">QTY</th><th style="text-align:right">BEDRAG (SRD)</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>BEZORG</td><td>Bezorgkosten starttarief</td><td style="text-align:center">1</td><td style="text-align:right">65.00</td></tr>
+        ${z.afstand_km?`<tr><td>2</td><td>AFSTAND</td><td>Afstandskosten ${z.afstand_km} km × SRD 10</td><td style="text-align:center">1</td><td style="text-align:right">${afstandKosten}</td></tr>`:""}
+        ${z.cod_bedrag>0?`<tr><td>3</td><td>COD</td><td>Rembours te innen bij levering</td><td style="text-align:center">1</td><td style="text-align:right">${parseFloat(z.cod_bedrag).toFixed(2)}</td></tr>`:""}
+        <tr class="total-row"><td colspan="4" style="text-align:right;letter-spacing:1px">TE BETALEN TOTAAL</td><td style="text-align:right">SRD ${totaal}</td></tr>
+      </tbody>
+    </table>
+    <div class="betaal">⚠️ <strong>Betaaltermijn: 3 dagen</strong> — Uiterlijk vóór <strong>${betaaldatum}</strong> | Methode: <strong>${z.betaalmethode||"POS"}</strong></div>
+    <div class="footer">SOlogics Suriname · sologics.site · Marowijnestraat 84a Paramaribo<br>Hakrinkbank SRD: 2000.300.31 · Finabank SRD: 1001966177</div>
+  </div>`;
+
+  if(pod){
+    html+=`<div class="pod-page">
+      <div class="header">${logo}<div class="header-right"><div><strong>sologics.site</strong></div></div></div>
+      <div class="pod-title"><span>PROOF OF DELIVERY</span><span style="color:#8B1020">D.O. #: ${z.zending_code}</span></div>
+      <div class="pod-body">
+        <div class="pod-row"><span class="pod-lbl">Submitted by</span><span>${z.chauffeur_naam||"Chauffeur"} op ${fmtdt(pod.tijdstip)}</span></div>
+        <div class="pod-row"><span class="pod-lbl">Received by</span><span style="font-weight:bold">${pod.ontvanger||"—"}</span></div>
+        <div class="pod-row"><span class="pod-lbl">Status</span><span style="color:#2a7a2a;font-weight:bold">GOODS RECEIVED IN GOOD ORDER</span></div>
+        ${pod.lat?`<div class="pod-row"><span class="pod-lbl">GPS</span><span>${pod.lat}, ${pod.lng}</span></div>`:""}
+        <div style="margin-top:16px">
+          <div style="font-size:10px;font-weight:bold;text-transform:uppercase;color:#888;margin-bottom:10px">Signature / Photos</div>
+          <div class="sig-photos">
+            ${pod.handtekening?`<div><div style="font-size:10px;color:#888;margin-bottom:4px">HANDTEKENING</div><img src="${pod.handtekening}" style="height:120px;border:1px solid #ddd;padding:4px;background:#fff"/></div>`:""}
+            ${pod.foto_url?`<div><div style="font-size:10px;color:#888;margin-bottom:4px">BEWIJS FOTO</div><img src="${pod.foto_url}" style="max-height:220px;max-width:320px;border:1px solid #ddd"/></div>`:""}
+          </div>
+        </div>
+        <div style="margin-top:20px;padding-top:12px;border-top:1px solid #ddd">
+          <strong style="font-size:11px;text-transform:uppercase">Terms and Conditions</strong>
+          <p style="color:#555;font-size:12px;margin-top:6px">Conform ontvangen</p>
+        </div>
+      </div>
+      <div class="footer">SOlogics Suriname · sologics.site</div>
+    </div>`;
+  }
+
+  document.getElementById("root").innerHTML=html;
+  document.title="Invoice "+z.zending_code+" - SOlogics";
+}
+
+load();
+</script>
+</body>
+</html>
