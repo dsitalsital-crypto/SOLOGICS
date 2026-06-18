@@ -1101,21 +1101,19 @@ function App(){
   const [gebruiker,setGebruiker]=React.useState(()=>{
     try{const s=sessionStorage.getItem("sl_gebruiker");return s?JSON.parse(s):{naam:"Admin",rol:"admin"};}catch(e){return {naam:"Admin",rol:"admin"};}
   });
-  const rol=gebruiker?.rol||"admin";
-  const isAdmin=rol==="admin";
-  const isManager=rol==="admin"||rol==="manager";
-  const isDispatcher=true;
-
-  function uitloggen(){sessionStorage.clear();setLoggedIn(false);}
-
-  if(!loggedIn)return <AdminLogin onLogin={(g)=>{setLoggedIn(true);if(g)setGebruiker(g);}}/>;
-
   const [page,setPage]=React.useState("dashboard");
   const [zendingen,setZendingen]=React.useState([]);
   const [chauffeurs,setChauffeurs]=React.useState([]);
   const [klanten,setKlanten]=React.useState([]);
   const [loading,setLoading]=React.useState(true);
   const [error,setError]=React.useState("");
+
+  const rol=gebruiker?.rol||"admin";
+  const isAdmin=rol==="admin";
+  const isManager=rol==="admin"||rol==="manager";
+  const isDispatcher=true;
+
+  function uitloggen(){sessionStorage.clear();setLoggedIn(false);}
 
   async function load(){
     setLoading(true);
@@ -1130,7 +1128,9 @@ function App(){
     setLoading(false);
   }
 
-  React.useEffect(()=>{load();},[]);
+  React.useEffect(()=>{if(loggedIn)load();},[loggedIn]);
+
+  if(!loggedIn)return <AdminLogin onLogin={(g)=>{setLoggedIn(true);if(g)setGebruiker(g);}}/>;
 
   const open_dispatch=zendingen.filter(z=>!z.chauffeur_id&&!["afgeleverd","voltooid","mislukt"].includes(z.status)).length;
 
