@@ -1,0 +1,1289 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<title>SOlogics</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Bebas+Neue&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0D1117;font-family:'DM Sans',sans-serif;color:#E6EDF3;overflow-x:hidden}
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:#0D1117}::-webkit-scrollbar-thumb{background:#21262D;border-radius:2px}
+input,select,textarea{font-family:'DM Sans',sans-serif;color:#E6EDF3;-webkit-appearance:none}
+input::placeholder,textarea::placeholder{color:#484F58}
+button{-webkit-tap-highlight-color:transparent}
+@media(max-width:700px){
+  .sidebar{display:none!important}
+  .bottom-nav{display:flex!important}
+  .main-wrap{padding-bottom:72px!important}
+  .hide-mob{display:none!important}
+  .stats-grid{grid-template-columns:1fr 1fr!important}
+  .two-col{grid-template-columns:1fr!important}
+  .modal-box{width:98vw!important;border-radius:6px 6px 0 0!important;max-height:88vh!important}
+  .page-head{flex-wrap:wrap!important;gap:10px!important}
+  .page-head button{flex:1!important;justify-content:center!important}
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+
+const SUPA_URL="https://bvnyzxusfiloaivvhlnn.supabase.co";
+const KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ2bnl6eHVzZmlsb2FpdnZobG5uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2NjAzMjcsImV4cCI6MjA5MzIzNjMyN30.uT4KjSUxK9rwINGRktVcUgu3vdwvuoQ3lEFfccfJTQY";
+const MAPS_KEY="AIzaSyAAljdqj-5DtidkaQG2pDgBnpHHGSB-QKU";
+const START_ADRES="Marowijnestraat 84a, Paramaribo, Suriname";
+const START_BEDRAG=65;
+const PRIJS_PER_KM=10;
+
+async function downloadInvoice(z){
+  const res=await fetch(SUPA_URL+"/functions/v1/genereer-invoice",{
+    method:"POST",
+    headers:{apikey:KEY,Authorization:"Bearer "+KEY,"Content-Type":"application/json"},
+    body:JSON.stringify(z)
+  });
+  const html=await res.text();
+  const win=window.open("","_blank");
+  win.document.write(html);
+  win.document.close();
+  setTimeout(()=>win.print(),500);
+}
+
+async function berekenPrijs(afleveradres){
+  try{
+    const r=await fetch(SUPA_URL+"/functions/v1/bereken-prijs",{
+      method:"POST",
+      headers:{apikey:KEY,Authorization:"Bearer "+KEY,"Content-Type":"application/json"},
+      body:JSON.stringify({afleveradres})
+    });
+    const d=await r.json();
+    if(d.ok)return {km:d.km,prijs:d.prijs};
+    return null;
+  }catch(e){
+    return null;
+  }
+}
+async function db(path,o={}){
+  const sep=path.includes("?") ? "&" : "?";
+  const url=SUPA_URL+"/rest/v1"+path+sep+"apikey="+KEY;
+  const method=o.method||"GET";
+  const reqHeaders=new Headers();
+  reqHeaders.set("apikey",KEY);
+  reqHeaders.set("Authorization","Bearer "+KEY);
+  reqHeaders.set("Accept","application/json");
+  if(method!=="GET"&&method!=="DELETE"){
+    reqHeaders.set("Content-Type","application/json");
+  }
+  if(o.headers){
+    Object.entries(o.headers).forEach(([k,v])=>reqHeaders.set(k,v));
+  }
+  const r=await fetch(url,{...o,method,headers:reqHeaders});
+  if(!r.ok)throw new Error(await r.text());
+  if(r.status===204||r.status===201)return null;
+  const text=await r.text();
+  if(!text||text.trim()==="")return null;
+  return JSON.parse(text);
+}
+
+const fd=d=>d?new Date(d).toLocaleDateString("nl-NL",{day:"2-digit",month:"short",year:"numeric"}):"—";
+const fs=d=>d?new Date(d).toLocaleDateString("nl-NL",{day:"2-digit",month:"short"}):"—";
+
+const ZSTATUS={
+  aangemaakt:   {l:"Aangemaakt",    s:"Aangemaakt", c:"#8B949E",bg:"#21262D"},
+  toegewezen:   {l:"Toegewezen",    s:"Toegewezen", c:"#BC8CFF",bg:"#2A1F5A"},
+  geaccepteerd: {l:"Geaccepteerd",  s:"Geaccepteerd",c:"#58A6FF",bg:"#1A3A5C"},
+  naar_ophaling:{l:"Naar ophaling", s:"Ophaling",   c:"#D29922",bg:"#2D1D00"},
+  opgehaald:    {l:"Opgehaald",     s:"Opgehaald",  c:"#F0883E",bg:"#2D1800"},
+  onderweg:     {l:"Onderweg",      s:"Onderweg",   c:"#58A6FF",bg:"#1A3A5C"},
+  aangekomen:   {l:"Aangekomen",    s:"Aangekomen", c:"#79B8FF",bg:"#1A3A5C"},
+  afgeleverd:   {l:"Afgeleverd",    s:"Afgelev.",   c:"#3FB950",bg:"#112D24"},
+  mislukt:      {l:"Mislukt",       s:"Mislukt",    c:"#f01e2c",bg:"#2a0408"},
+  retour:       {l:"Retour",        s:"Retour",     c:"#D29922",bg:"#2D1D00"},
+  voltooid:     {l:"Voltooid",      s:"Voltooid",   c:"#3FB950",bg:"#112D24"},
+};
+
+const DISTRICTS=["Paramaribo","Wanica","Commewijne","Nickerie","Saramacca","Coronie","Marowijne","Para","Brokopondo","Sipaliwini"];
+const DIENST=["standaard","express","same_day"];
+
+const S={
+  btn:{background:"#f01e2c",color:"#fff",border:"none",borderRadius:2,padding:"9px 16px",fontSize:13,fontWeight:600,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:6,fontFamily:"'DM Sans',sans-serif"},
+  btnSm:{background:"#f01e2c",color:"#fff",border:"none",borderRadius:2,padding:"5px 10px",fontSize:11,fontWeight:600,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:4,fontFamily:"'DM Sans',sans-serif"},
+  btnGhost:{background:"transparent",color:"#8B949E",border:"1px solid #30363D",borderRadius:2,padding:"7px 12px",fontSize:12,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"},
+  inp:{background:"#0D1117",border:"1px solid #30363D",borderRadius:2,color:"#E6EDF3",padding:"9px 11px",fontSize:13,width:"100%",outline:"none"},
+  sel:{background:"#0D1117",border:"1px solid #30363D",borderRadius:2,color:"#E6EDF3",padding:"9px 11px",fontSize:13,width:"100%",outline:"none"},
+  lbl:{fontSize:10,color:"#8B949E",textTransform:"uppercase",letterSpacing:"0.07em",fontWeight:600,marginBottom:5,display:"block"},
+  card:{background:"#161B22",border:"1px solid #21262D",borderRadius:2,padding:14},
+  tw:{background:"#161B22",border:"1px solid #21262D",borderRadius:2,overflow:"hidden",overflowX:"auto",WebkitOverflowScrolling:"touch"},
+  th:{textAlign:"left",padding:"9px 12px",fontSize:10,fontWeight:700,color:"#8B949E",textTransform:"uppercase",letterSpacing:"0.07em",borderBottom:"1px solid #21262D",whiteSpace:"nowrap"},
+  td:{padding:"10px 12px",borderBottom:"1px solid #1c2128",color:"#C9D1D9",verticalAlign:"middle",fontSize:13},
+};
+
+function Fld({l,ch}){return <div style={{marginBottom:13}}><label style={S.lbl}>{l}</label>{ch}</div>}
+
+function Bdg({status,short}){
+  const m=ZSTATUS[status]||ZSTATUS.aangemaakt;
+  return <span style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 7px",borderRadius:2,fontSize:10,fontWeight:700,background:m.bg,color:m.c,whiteSpace:"nowrap"}}>
+    <span style={{width:5,height:5,borderRadius:"50%",background:m.c,flexShrink:0,display:"inline-block"}}/>
+    {short?m.s:m.l}
+  </span>
+}
+
+function Modal({title,onClose,children}){
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.82)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:300}} onClick={e=>{if(e.target===e.currentTarget)onClose()}}>
+    <div className="modal-box" style={{background:"#161B22",border:"1px solid #21262D",borderRadius:"4px 4px 0 0",padding:20,width:560,maxHeight:"90vh",overflowY:"auto"}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
+        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:22,letterSpacing:1}}>{title}</div>
+        <button onClick={onClose} style={S.btnGhost}>✕</button>
+      </div>
+      {children}
+    </div>
+  </div>
+}
+
+// ── DASHBOARD ────────────────────────────────────────────────────────────────
+function Dashboard({zendingen,chauffeurs,klanten}){
+  const actief=zendingen.filter(z=>!["afgeleverd","voltooid","mislukt"].includes(z.status)).length;
+  const onderweg=zendingen.filter(z=>z.status==="onderweg").length;
+  const vandaag=zendingen.filter(z=>z.status==="afgeleverd"&&new Date(z.bijgewerkt_op).toDateString()===new Date().toDateString()).length;
+  const mislukt=zendingen.filter(z=>z.status==="mislukt").length;
+  const cod_open=zendingen.filter(z=>z.cod_bedrag>0&&!z.cod_ontvangen).length;
+  const recent=[...zendingen].sort((a,b)=>new Date(b.aangemaakt_op)-new Date(a.aangemaakt_op)).slice(0,6);
+
+  return <div style={{display:"flex",flexDirection:"column",gap:16}}>
+    <div>
+      <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:26,letterSpacing:1}}>Dashboard</div>
+      <div style={{fontSize:12,color:"#8B949E",marginTop:2}}>{new Date().toLocaleDateString("nl-NL",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}</div>
+    </div>
+
+    <div className="stats-grid" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
+      {[
+        {l:"Actieve zendingen",v:actief,c:"#E6EDF3"},
+        {l:"Onderweg",v:onderweg,c:"#58A6FF"},
+        {l:"Afgelev. vandaag",v:vandaag,c:"#3FB950"},
+        {l:"COD open",v:cod_open,c:cod_open>0?"#D29922":"#E6EDF3"},
+      ].map(s=><div key={s.l} style={{background:"#161B22",border:"1px solid #21262D",borderTop:"2px solid #f01e2c",borderRadius:2,padding:"12px 10px"}}>
+        <div style={{fontSize:10,color:"#8B949E",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.05em",lineHeight:1.3}}>{s.l}</div>
+        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:36,color:s.c,lineHeight:1,marginTop:4}}>{s.v}</div>
+      </div>)}
+    </div>
+
+    <div className="stats-grid" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
+      {[
+        {l:"Totaal zendingen",v:zendingen.length,c:"#E6EDF3"},
+        {l:"Chauffeurs actief",v:chauffeurs.filter(c=>c.actief).length,c:"#BC8CFF"},
+        {l:"Klanten",v:klanten.length,c:"#58A6FF"},
+        {l:"Mislukt",v:mislukt,c:mislukt>0?"#f01e2c":"#8B949E"},
+      ].map(s=><div key={s.l} style={{background:"#161B22",border:"1px solid #21262D",borderRadius:2,padding:"10px 10px"}}>
+        <div style={{fontSize:10,color:"#8B949E",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.05em",lineHeight:1.3}}>{s.l}</div>
+        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:28,color:s.c,lineHeight:1,marginTop:3}}>{s.v}</div>
+      </div>)}
+    </div>
+
+    <div>
+      <div style={{fontSize:13,fontWeight:600,marginBottom:10}}>Recente zendingen</div>
+      <div style={S.tw}>
+        <table style={{width:"100%",borderCollapse:"collapse",minWidth:380}}>
+          <thead style={{background:"#0D1117"}}>
+            <tr>
+              <th style={S.th}>Code</th>
+              <th style={S.th}>Ontvanger</th>
+              <th style={S.th} className="hide-mob">District</th>
+              <th style={S.th} className="hide-mob">Chauffeur</th>
+              <th style={S.th}>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {recent.length===0&&<tr><td colSpan={5} style={{...S.td,textAlign:"center",color:"#8B949E",padding:28}}>Nog geen zendingen</td></tr>}
+            {recent.map(z=>{
+              const ch=chauffeurs.find(c=>c.id===z.chauffeur_id);
+              return <tr key={z.id}>
+                <td style={{...S.td,color:"#f01e2c",fontFamily:"'Bebas Neue',sans-serif",fontSize:14,whiteSpace:"nowrap"}}>{z.zending_code}</td>
+                <td style={{...S.td,maxWidth:110,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{z.ontvanger_naam||"—"}</td>
+                <td style={{...S.td,color:"#8B949E"}} className="hide-mob">{z.district||"—"}</td>
+                <td style={{...S.td,color:"#8B949E"}} className="hide-mob">{ch?.naam||"—"}</td>
+                <td style={S.td}><Bdg status={z.status} short/></td>
+              </tr>
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div className="two-col" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+      <div style={S.card}>
+        <div style={{fontSize:13,fontWeight:600,marginBottom:10}}>Status verdeling</div>
+        {Object.entries(ZSTATUS).map(([k,m])=>{
+          const cnt=zendingen.filter(z=>z.status===k).length;
+          const pct=zendingen.length>0?Math.round((cnt/zendingen.length)*100):0;
+          return <div key={k} style={{marginBottom:7}}>
+            <div style={{display:"flex",justifyContent:"space-between",fontSize:11,marginBottom:2}}>
+              <span style={{color:m.c}}>{m.s}</span>
+              <span style={{color:"#8B949E"}}>{cnt}</span>
+            </div>
+            <div style={{height:3,background:"#21262D",borderRadius:2}}>
+              <div style={{height:3,width:`${pct}%`,background:m.c,borderRadius:2}}/>
+            </div>
+          </div>
+        })}
+      </div>
+      <div style={S.card}>
+        <div style={{fontSize:13,fontWeight:600,marginBottom:10}}>Chauffeurs</div>
+        {chauffeurs.length===0&&<div style={{color:"#8B949E",fontSize:12}}>Nog geen chauffeurs</div>}
+        {chauffeurs.map(c=>{
+          const cnt=zendingen.filter(z=>z.chauffeur_id===c.id&&["onderweg","naar_ophaling","opgehaald"].includes(z.status)).length;
+          return <div key={c.id} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 0",borderBottom:"1px solid #21262D"}}>
+            <div style={{width:8,height:8,borderRadius:"50%",background:c.actief?"#3FB950":"#484F58",flexShrink:0}}/>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:13,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.naam}</div>
+              <div style={{fontSize:11,color:"#8B949E"}}>{c.voertuig||"—"} · {c.kenteken||"—"}</div>
+            </div>
+            <span style={{background:"#2a0408",color:"#f01e2c",fontSize:11,fontWeight:600,padding:"2px 7px",borderRadius:2}}>{cnt} actief</span>
+          </div>
+        })}
+      </div>
+    </div>
+  </div>
+}
+
+// ── ZENDINGEN ────────────────────────────────────────────────────────────────
+function Zendingen({zendingen,chauffeurs,klanten,onRefresh}){
+  const [filter,setFilter]=React.useState("alle");
+  const [search,setSearch]=React.useState("");
+  const [showNew,setShowNew]=React.useState(false);
+  const [detail,setDetail]=React.useState(null);
+  const [saving,setSaving]=React.useState(false);
+  const [err,setErr]=React.useState("");
+  const [showBulk,setShowBulk]=React.useState(false);
+  const [bulkData,setBulkData]=React.useState([]);
+  const [bulkLoading,setBulkLoading]=React.useState(false);
+  const [bulkDone,setBulkDone]=React.useState(0);
+  const [form,setForm]=React.useState({
+    klant_id:"",ontvanger_naam:"",ontvanger_tel:"",ontvanger_email:"",
+    ophaaladres:"",afleveradres:"",district:"Paramaribo",
+    pakkettype:"",gewicht_kg:"",diensttype:"standaard",
+    cod_bedrag:"",chauffeur_id:"",notities:"",
+    betaler:"afzender",betaalmethode:"pos"
+  });
+  const [prijsInfo,setPrijsInfo]=React.useState(null);
+  const [berekenend,setBerekenend]=React.useState(false);
+
+  async function updateAfleveradres(adres){
+    setForm(f=>({...f,afleveradres:adres}));
+    if(adres.length>5){
+      setBerekenend(true);
+      const p=await berekenPrijs(adres);
+      setPrijsInfo(p);
+      if(p)setForm(f=>({...f,afleveradres:adres,prijs_srd:p.prijs,afstand_km:p.km}));
+      setBerekenend(false);
+    }
+  }
+
+  const filtered=zendingen.filter(z=>{
+    const mf=filter==="alle"||z.status===filter;
+    const ms=!search||z.zending_code?.toLowerCase().includes(search.toLowerCase())||z.ontvanger_naam?.toLowerCase().includes(search.toLowerCase())||z.afleveradres?.toLowerCase().includes(search.toLowerCase())||z.district?.toLowerCase().includes(search.toLowerCase());
+    return mf&&ms;
+  });
+
+  async function save(){
+    if(!form.afleveradres){setErr("Afleveradres is verplicht");return;}
+    setSaving(true);setErr("");
+    try{
+      try{
+        await db("/zendingen",{method:"POST",headers:{Prefer:"return=representation"},body:JSON.stringify({
+          ...form,
+          gewicht_kg:form.gewicht_kg||null,
+          cod_bedrag:parseFloat(form.cod_bedrag)||0,
+          klant_id:form.klant_id||null,
+          chauffeur_id:form.chauffeur_id||null,
+          prijs_srd:prijsInfo?prijsInfo.prijs:null,
+          afstand_km:prijsInfo?prijsInfo.km:null,
+          zending_code:""
+        })});
+      }catch(e){
+        // 201/empty response is fine - zending was created
+        if(!e.message.includes("Unexpected end of JSON")&&!e.message.includes("201")){
+          setErr(e.message);setSaving(false);return;
+        }
+      }
+      setShowNew(false);
+      setForm({klant_id:"",ontvanger_naam:"",ontvanger_tel:"",ontvanger_email:"",ophaaladres:"",afleveradres:"",district:"Paramaribo",pakkettype:"",gewicht_kg:"",diensttype:"standaard",cod_bedrag:"",chauffeur_id:"",notities:"",betaler:"afzender",betaalmethode:"pos"});setPrijsInfo(null);
+      onRefresh();
+    }catch(e){setErr(e.message);}
+    setSaving(false);
+  }
+
+  async function updateStatus(id,status){
+    await db(`/zendingen?id=eq.${id}`,{method:"PATCH",headers:{Prefer:"return=representation"},body:JSON.stringify({status})});
+    // log it
+    await db("/status_logs",{method:"POST",headers:{Prefer:"return=representation"},body:JSON.stringify({zending_id:id,status})});
+    onRefresh();
+    if(detail?.id===id)setDetail(d=>({...d,status}));
+  }
+
+  async function assignDriver(id,chauffeur_id){
+    await db(`/zendingen?id=eq.${id}`,{method:"PATCH",headers:{Prefer:"return=representation"},body:JSON.stringify({chauffeur_id,status:"toegewezen"})});
+    await db("/status_logs",{method:"POST",headers:{Prefer:"return=representation"},body:JSON.stringify({zending_id:id,status:"toegewezen"})});
+    onRefresh();
+    if(detail?.id===id)setDetail(d=>({...d,chauffeur_id,status:"toegewezen"}));
+  }
+
+  async function del(id){
+    if(!confirm("Zending verwijderen?"))return;
+    await db(`/zendingen?id=eq.${id}`,{method:"DELETE"});
+    onRefresh();setDetail(null);
+  }
+
+  function downloadTemplate(){
+    const a=document.createElement("a");
+    a.href="https://dsitalsital-crypto.github.io/SOLOGICS/sologics_template.xlsx";
+    a.download="sologics_template.xlsx";
+    a.click();
+  }
+
+  function handleBulkFile(e){
+    const file=e.target.files[0];
+    if(!file)return;
+    const isExcel=file.name.endsWith(".xlsx")||file.name.endsWith(".xls");
+    const reader=new FileReader();
+    reader.onload=ev=>{
+      let rows=[];
+      if(isExcel){
+        const data=new Uint8Array(ev.target.result);
+        const wb=XLSX.read(data,{type:"array"});
+        // Gebruik sheet 1 als default (formulier), sheet 2 voor bulk
+        const sheetName=wb.SheetNames[0];
+        const ws=wb.Sheets[sheetName];
+        // Detecteer sheet type en lees data
+        let json=[];
+        const useSheet1=sheetName===wb.SheetNames[0];
+        if(useSheet1){
+          // Sheet 1 - formulier stijl: kolom A = label, kolom B = waarde
+          const arr=XLSX.utils.sheet_to_json(ws,{header:1,defval:""});
+          const obj={};
+          arr.forEach(row=>{
+            if(row[0]&&row[1]!==undefined&&row[1]!==""){
+              obj[String(row[0]).toLowerCase()]=String(row[1]);
+            }
+          });
+          const get=(...names)=>{
+            for(const n of names){
+              const k=Object.keys(obj).find(k=>k.includes(n));
+              if(k)return obj[k].trim();
+            }
+            return "";
+          };
+          const r={
+            naam:get("naam","name"),
+            adres:get("aflever","adres"),
+            telefoon:get("telefoon","tel"),
+            email:get("email"),
+            pakket:get("pakket","type"),
+            gewicht:get("gewicht","kg"),
+            cod:get("cod","remb")||"0",
+            district:get("district","wijk")||"Paramaribo",
+            diensttype:get("dienst","service")||"standaard",
+            betaler:get("betaler")||"afzender",
+            betaalmethode:get("methode","betaal")||"pos",
+            notities:get("notit","note"),
+          };
+          if(r.adres)rows=[r];
+        } else {
+          // Sheet 2 - tabel stijl: skip rij 1 (instructie), headers op rij 2
+          json=XLSX.utils.sheet_to_json(ws,{defval:"",range:1});
+          rows=json.map(r=>{
+            const keys=Object.keys(r).map(k=>k.toLowerCase());
+            const get=(...names)=>{
+              for(const n of names){
+                const k=keys.find(k=>k.includes(n));
+                if(k)return String(r[Object.keys(r)[keys.indexOf(k)]]||"").trim();
+              }
+              return "";
+            };
+            return {
+              naam:get("naam","name"),
+              adres:get("aflever","adres","address"),
+              telefoon:get("telefoon","tel","phone"),
+              email:get("email","mail"),
+              pakket:get("pakket","type"),
+              gewicht:get("gewicht","weight","kg"),
+              cod:get("cod","remb")||"0",
+              district:get("district","wijk")||"Paramaribo",
+              diensttype:get("dienst","service")||"standaard",
+              betaler:get("betaler","payer")||"afzender",
+              betaalmethode:get("methode","payment")||"pos",
+              notities:get("notit","note","opmerking"),
+            };
+          }).filter(r=>r.adres&&r.adres!=="Afleveradres *"&&r.naam!=="Jan Jansen"&&r.naam!=="Maria Doe");
+        }
+      } else {
+        const text=ev.target.result;
+        const lines=text.split("\n").filter(l=>l.trim());
+        const headers=lines[0].split(",").map(h=>h.trim().toLowerCase());
+        rows=lines.slice(1).map(line=>{
+          const vals=line.split(",").map(v=>v.trim().replace(/^"|"$/g,""));
+          const obj={};
+          headers.forEach((h,i)=>{obj[h]=vals[i]||"";});
+          return {
+            naam:obj.naam||obj.name||"",
+            adres:obj.afleveradres||obj.adres||"",
+            telefoon:obj.telefoonnummer||obj.telefoon||"",
+            email:obj.email||"",
+            pakket:obj.pakkettype||obj.pakket||"",
+            gewicht:obj.gewicht_kg||obj.gewicht||"",
+            cod:obj.cod_bedrag||obj.cod||"0",
+            district:obj.district||"Paramaribo",
+            diensttype:obj.diensttype||"standaard",
+            betaler:obj.betaler||"afzender",
+            betaalmethode:obj.betaalmethode||"pos",
+            notities:obj.notities||"",
+          };
+        }).filter(r=>r.adres);
+      }
+      setBulkData(rows);
+    };
+    if(isExcel) reader.readAsArrayBuffer(file);
+    else reader.readAsText(file);
+  }
+
+  async function saveBulk(){
+    setBulkLoading(true);setBulkDone(0);
+    for(let i=0;i<bulkData.length;i++){
+      const r=bulkData[i];
+      try{
+        // Bereken prijs
+        let prijs_srd=null,afstand_km=null;
+        if(r.adres){
+          const p=await berekenPrijs(r.adres);
+          if(p){prijs_srd=p.prijs;afstand_km=p.km;}
+        }
+        await db("/zendingen",{method:"POST",headers:{Prefer:"return=representation"},body:JSON.stringify({
+          ontvanger_naam:r.naam,
+          afleveradres:r.adres,
+          ontvanger_tel:r.telefoon,
+          ontvanger_email:r.email,
+          pakkettype:r.pakket,
+          gewicht_kg:r.gewicht||null,
+          cod_bedrag:parseFloat(r.cod)||0,
+          district:r.district||"Paramaribo",
+          diensttype:"standaard",
+          betaler:"afzender",
+          betaalmethode:"pos",
+          prijs_srd,afstand_km,
+          zending_code:""
+        })});
+        setBulkDone(i+1);
+      }catch(e){console.log("Rij fout:",e);}
+    }
+    setBulkLoading(false);
+    setShowBulk(false);setBulkData([]);setBulkDone(0);
+    onRefresh();
+  }
+
+  return <div style={{display:"flex",flexDirection:"column",gap:14}}>
+    <div className="page-head" style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+      <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:26,letterSpacing:1}}>Zendingen</div>
+      <div style={{display:"flex",gap:8}}>
+        <button style={{...S.btnGhost,fontSize:12}} onClick={()=>setShowBulk(true)}>📊 Bulk upload</button>
+        <button style={S.btn} onClick={()=>setShowNew(true)}>+ Nieuwe zending</button>
+      </div>
+    </div>
+
+    <input style={S.inp} placeholder="Zoek op code, ontvanger, adres, district..." value={search} onChange={e=>setSearch(e.target.value)}/>
+
+    <div style={{display:"flex",gap:3,background:"#0D1117",padding:3,borderRadius:2,overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
+      {["alle",...Object.keys(ZSTATUS)].map(s=><button key={s} onClick={()=>setFilter(s)} style={{padding:"5px 9px",borderRadius:2,fontSize:10,cursor:"pointer",border:"none",fontFamily:"'DM Sans',sans-serif",background:filter===s?"#161B22":"transparent",color:filter===s?"#f01e2c":"#8B949E",fontWeight:filter===s?700:400,whiteSpace:"nowrap",flexShrink:0}}>
+        {s==="alle"?"Alle":ZSTATUS[s].s}
+      </button>)}
+    </div>
+
+    <div style={S.tw}>
+      <table style={{width:"100%",borderCollapse:"collapse",minWidth:360}}>
+        <thead style={{background:"#0D1117"}}>
+          <tr>
+            <th style={S.th}>Code</th>
+            <th style={S.th}>Ontvanger</th>
+            <th style={S.th} className="hide-mob">District</th>
+            <th style={S.th} className="hide-mob">Chauffeur</th>
+            <th style={S.th} className="hide-mob">COD</th>
+            <th style={S.th} className="hide-mob">Prijs</th>
+            <th style={S.th}>Status</th>
+            <th style={S.th}></th>
+          </tr>
+        </thead>
+        <tbody>
+          {filtered.length===0&&<tr><td colSpan={7} style={{...S.td,textAlign:"center",color:"#8B949E",padding:28}}>Geen zendingen gevonden</td></tr>}
+          {filtered.map(z=>{
+            const ch=chauffeurs.find(c=>c.id===z.chauffeur_id);
+            return <tr key={z.id} style={{cursor:"pointer"}} onClick={()=>setDetail(z)}>
+              <td style={{...S.td,color:"#f01e2c",fontFamily:"'Bebas Neue',sans-serif",fontSize:14,whiteSpace:"nowrap"}}>{z.zending_code}</td>
+              <td style={{...S.td,maxWidth:100,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{z.ontvanger_naam||"—"}</td>
+              <td style={{...S.td,color:"#8B949E"}} className="hide-mob">{z.district||"—"}</td>
+              <td style={{...S.td,color:"#8B949E"}} className="hide-mob">{ch?.naam||<span style={{color:"#f01e2c",fontSize:11}}>⚠ Geen</span>}</td>
+              <td style={S.td} className="hide-mob">{z.cod_bedrag>0?<span style={{color:"#D29922",fontWeight:600}}>SRD {z.cod_bedrag}</span>:"—"}</td>
+              <td style={S.td} className="hide-mob">{z.prijs_srd?<span style={{color:"#3FB950",fontWeight:600}}>SRD {z.prijs_srd}</span>:"—"}</td>
+              <td style={S.td}><Bdg status={z.status} short/></td>
+              <td style={S.td} onClick={e=>e.stopPropagation()}><button style={{...S.btnGhost,padding:"3px 8px"}} onClick={()=>del(z.id)}>✕</button></td>
+            </tr>
+          })}
+        </tbody>
+      </table>
+    </div>
+
+    {showNew&&<Modal title="Nieuwe zending" onClose={()=>setShowNew(false)}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <Fld l="Klant (optioneel)" ch={<select style={S.sel} value={form.klant_id} onChange={e=>setForm(f=>({...f,klant_id:e.target.value}))}><option value="">Selecteer...</option>{klanten.map(k=><option key={k.id} value={k.id}>{k.bedrijfsnaam}</option>)}</select>}/>
+        <Fld l="Diensttype" ch={<select style={S.sel} value={form.diensttype} onChange={e=>setForm(f=>({...f,diensttype:e.target.value}))}>{DIENST.map(d=><option key={d} value={d}>{d.replace("_"," ")}</option>)}</select>}/>
+      </div>
+      <Fld l="Naam ontvanger" ch={<input style={S.inp} value={form.ontvanger_naam} onChange={e=>setForm(f=>({...f,ontvanger_naam:e.target.value}))} placeholder="Volledige naam"/>}/>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <Fld l="Telefoon ontvanger" ch={<input style={S.inp} value={form.ontvanger_tel} onChange={e=>setForm(f=>({...f,ontvanger_tel:e.target.value}))}/>}/>
+        <Fld l="Email ontvanger" ch={<input style={S.inp} type="email" value={form.ontvanger_email} onChange={e=>setForm(f=>({...f,ontvanger_email:e.target.value}))} placeholder="klant@email.com"/>}/>
+        <Fld l="District" ch={<select style={S.sel} value={form.district} onChange={e=>setForm(f=>({...f,district:e.target.value}))}>{DISTRICTS.map(d=><option key={d} value={d}>{d}</option>)}</select>}/>
+      </div>
+      <Fld l="Ophaaladres" ch={<input style={S.inp} value={form.ophaaladres} onChange={e=>setForm(f=>({...f,ophaaladres:e.target.value}))} placeholder="Adres van afhalen"/>}/>
+      <Fld l="Afleveradres *" ch={<input style={S.inp} value={form.afleveradres} onChange={e=>updateAfleveradres(e.target.value)} placeholder="Adres van bezorgen"/>}/>
+      {berekenend&&<div style={{fontSize:12,color:"#8B949E",marginBottom:8}}>⏳ Prijs berekenen...</div>}
+      {prijsInfo&&<div style={{background:"#112D24",border:"1px solid #3FB950",borderRadius:2,padding:"10px 12px",marginBottom:10,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <div style={{fontSize:12,color:"#3FB950"}}>📍 {prijsInfo.km} km van Marowijnestraat 84a</div>
+        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:20,color:"#3FB950"}}>SRD {prijsInfo.prijs}</div>
+      </div>}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+        <Fld l="Pakkettype" ch={<input style={S.inp} value={form.pakkettype} onChange={e=>setForm(f=>({...f,pakkettype:e.target.value}))} placeholder="Doos, tas..."/>}/>
+        <Fld l="Gewicht (kg)" ch={<input style={S.inp} type="number" value={form.gewicht_kg} onChange={e=>setForm(f=>({...f,gewicht_kg:e.target.value}))}/>}/>
+        <Fld l="COD bedrag (SRD)" ch={<input style={S.inp} type="number" value={form.cod_bedrag} onChange={e=>setForm(f=>({...f,cod_bedrag:e.target.value}))} placeholder="0"/>}/>
+      </div>
+      <Fld l="Chauffeur" ch={<select style={S.sel} value={form.chauffeur_id} onChange={e=>setForm(f=>({...f,chauffeur_id:e.target.value}))}><option value="">Later toewijzen</option>{chauffeurs.filter(c=>c.actief).map(c=><option key={c.id} value={c.id}>{c.naam} — {c.voertuig||"?"}</option>)}</select>}/>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <Fld l="Wie betaalt?" ch={<select style={S.sel} value={form.betaler} onChange={e=>setForm(f=>({...f,betaler:e.target.value}))}><option value="afzender">Afzender</option><option value="ontvanger">Ontvanger</option></select>}/>
+        <Fld l="Betaalmethode" ch={<select style={S.sel} value={form.betaalmethode} onChange={e=>setForm(f=>({...f,betaalmethode:e.target.value}))}><option value="pos">POS</option><option value="giraal">Giraal</option><option value="cash">Cash</option></select>}/>
+      </div>
+      <Fld l="Notities" ch={<textarea style={{...S.inp,height:60,resize:"vertical"}} value={form.notities} onChange={e=>setForm(f=>({...f,notities:e.target.value}))}/>}/>
+      {err&&<div style={{color:"#f01e2c",fontSize:12,marginBottom:10}}>{err}</div>}
+      <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+        <button style={S.btnGhost} onClick={()=>setShowNew(false)}>Annuleren</button>
+        <button style={S.btn} onClick={save} disabled={saving}>{saving?"Opslaan...":"Aanmaken"}</button>
+      </div>
+    </Modal>}
+
+    {detail&&<Modal title={detail.zending_code} onClose={()=>setDetail(null)}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:14}}>
+        {[
+          ["Ontvanger",detail.ontvanger_naam||"—"],
+          ["Telefoon",detail.ontvanger_tel||"—"],
+          ["District",detail.district||"—"],
+          ["Diensttype",detail.diensttype||"—"],
+          ["Ophaaladres",detail.ophaaladres||"—"],
+          ["Afleveradres",detail.afleveradres],
+          ["Pakket",detail.pakkettype||"—"],
+          ["Gewicht",detail.gewicht_kg?`${detail.gewicht_kg} kg`:"—"],
+          ["COD",detail.cod_bedrag>0?`SRD ${detail.cod_bedrag}`:"—"],["Prijs",detail.prijs_srd?`SRD ${detail.prijs_srd} (${detail.afstand_km} km)`:"—"],["Betaler",detail.betaler||"—"],["Betaalmethode",detail.betaalmethode||"—"],
+          ["COD ontvangen",detail.cod_ontvangen?"Ja":"Nee"],
+          ["Aangemaakt",fd(detail.aangemaakt_op)],
+          ["Notities",detail.notities||"—"],
+        ].map(([k,v])=><div key={k} style={{background:"#0D1117",borderRadius:2,padding:"7px 10px"}}>
+          <div style={{fontSize:10,color:"#8B949E",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>{k}</div>
+          <div style={{fontSize:13,color:"#E6EDF3"}}>{v}</div>
+        </div>)}
+      </div>
+
+      <div style={{marginBottom:14}}>
+        <label style={S.lbl}>Chauffeur toewijzen</label>
+        <div style={{display:"flex",gap:8}}>
+          <select style={{...S.sel,flex:1}} defaultValue={detail.chauffeur_id||""} id="ch-sel">
+            <option value="">Geen chauffeur</option>
+            {chauffeurs.filter(c=>c.actief).map(c=><option key={c.id} value={c.id}>{c.naam} — {c.voertuig||"?"}</option>)}
+          </select>
+          <button style={S.btn} onClick={()=>{const v=document.getElementById("ch-sel").value;assignDriver(detail.id,v||null);}}>Toewijzen</button>
+        </div>
+      </div>
+
+      <div>
+        <label style={S.lbl}>Status wijzigen</label>
+        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:4}}>
+          {Object.entries(ZSTATUS).map(([k,m])=><button key={k} onClick={()=>updateStatus(detail.id,k)} style={{padding:"6px 10px",borderRadius:2,fontSize:11,cursor:"pointer",border:`1px solid ${detail.status===k?m.c:"#30363D"}`,background:detail.status===k?m.bg:"transparent",color:detail.status===k?m.c:"#8B949E",fontFamily:"'DM Sans',sans-serif",fontWeight:600}}>
+            {m.l}
+          </button>)}
+        </div>
+      </div>
+      <div style={{display:"flex",justifyContent:"space-between",marginTop:14}}>
+        <button style={{...S.btnGhost,color:"#f01e2c",borderColor:"#f01e2c"}} onClick={()=>del(detail.id)}>Verwijderen</button>
+        <button style={S.btn} onClick={()=>downloadInvoice(detail)}>📄 Download Invoice</button>
+      </div>
+    </Modal>}
+
+    {showBulk&&<Modal title="Bulk Upload" onClose={()=>{setShowBulk(false);setBulkData([]);setBulkDone(0);}}>
+      <div style={{marginBottom:16}}>
+        <div style={{fontSize:13,color:"#C9D1D9",marginBottom:12}}>
+          Upload een Excel of CSV bestand met meerdere leveringen tegelijk.
+        </div>
+        <button onClick={downloadTemplate} style={{...S.btnGhost,marginBottom:14,width:"100%",justifyContent:"center"}}>
+          📥 Download Excel Template
+        </button>
+        <label style={{display:"block",border:"2px dashed #30363D",borderRadius:2,padding:"20px",textAlign:"center",cursor:"pointer",color:"#8B949E",fontSize:13}}>
+          📊 Klik om CSV/Excel te uploaden
+          <input type="file" accept=".csv,.xlsx,.xls" onChange={handleBulkFile} style={{display:"none"}}/>
+        </label>
+      </div>
+
+      {bulkData.length>0&&<div>
+        <div style={{fontSize:12,color:"#3FB950",marginBottom:10,fontWeight:600}}>✓ {bulkData.length} leveringen gevonden</div>
+        <div style={S.tw}>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+            <thead style={{background:"#0D1117"}}>
+              <tr>
+                {["Naam","Adres","Tel","Email","Pakket","Gewicht","COD"].map(h=><th key={h} style={{...S.th,padding:"7px 8px"}}>{h}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {bulkData.slice(0,5).map((r,i)=><tr key={i}>
+                <td style={{...S.td,padding:"6px 8px",fontSize:11}}>{r.naam||"—"}</td>
+                <td style={{...S.td,padding:"6px 8px",fontSize:11,maxWidth:100,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.adres||"—"}</td>
+                <td style={{...S.td,padding:"6px 8px",fontSize:11}}>{r.telefoon||"—"}</td>
+                <td style={{...S.td,padding:"6px 8px",fontSize:11}}>{r.email||"—"}</td>
+                <td style={{...S.td,padding:"6px 8px",fontSize:11}}>{r.pakket||"—"}</td>
+                <td style={{...S.td,padding:"6px 8px",fontSize:11}}>{r.gewicht||"—"}</td>
+                <td style={{...S.td,padding:"6px 8px",fontSize:11}}>{r.cod||"0"}</td>
+              </tr>)}
+              {bulkData.length>5&&<tr><td colSpan={7} style={{...S.td,color:"#8B949E",textAlign:"center",fontSize:11}}>...en nog {bulkData.length-5} meer</td></tr>}
+            </tbody>
+          </table>
+        </div>
+        {bulkDone>0&&<div style={{color:"#3FB950",fontSize:12,margin:"10px 0"}}>✓ {bulkDone} van {bulkData.length} verwerkt...</div>}
+        <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:14}}>
+          <button style={S.btnGhost} onClick={()=>{setBulkData([]);setBulkDone(0);}}>Wissen</button>
+          <button style={S.btn} onClick={saveBulk} disabled={bulkLoading}>
+            {bulkLoading?`Bezig... ${bulkDone}/${bulkData.length}`:`Importeer ${bulkData.length} leveringen`}
+          </button>
+        </div>
+      </div>}
+    </Modal>}
+  </div>
+}
+
+// ── CHAUFFEURS ────────────────────────────────────────────────────────────────
+function Chauffeurs({chauffeurs,zendingen,onRefresh}){
+  const [showNew,setShowNew]=React.useState(false);
+  const [form,setForm]=React.useState({naam:"",telefoon:"",email:"",kenteken:"",voertuig:"",pincode:"1234",actief:true});
+  const [saving,setSaving]=React.useState(false);
+  const [err,setErr]=React.useState("");
+
+  async function save(){
+    if(!form.naam){setErr("Naam is verplicht");return;}
+    setSaving(true);setErr("");
+    try{
+      await db("/chauffeurs",{method:"POST",headers:{Prefer:"return=representation"},body:JSON.stringify(form)});
+      setShowNew(false);setForm({naam:"",telefoon:"",email:"",kenteken:"",voertuig:"",pincode:"1234",actief:true});onRefresh();
+    }catch(e){setErr(e.message);}
+    setSaving(false);
+  }
+
+  async function toggle(id,actief){
+    await db(`/chauffeurs?id=eq.${id}`,{method:"PATCH",headers:{Prefer:"return=representation"},body:JSON.stringify({actief})});
+    onRefresh();
+  }
+
+  async function del(id){
+    if(!confirm("Chauffeur verwijderen?"))return;
+    await db(`/chauffeurs?id=eq.${id}`,{method:"DELETE"});onRefresh();
+  }
+
+  return <div style={{display:"flex",flexDirection:"column",gap:14}}>
+    <div className="page-head" style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+      <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:26,letterSpacing:1}}>Chauffeurs</div>
+      <button style={S.btn} onClick={()=>setShowNew(true)}>+ Nieuwe chauffeur</button>
+    </div>
+
+    <div style={{display:"flex",flexDirection:"column",gap:8}}>
+      {chauffeurs.length===0&&<div style={{...S.card,color:"#8B949E",textAlign:"center",padding:28,fontSize:13}}>Nog geen chauffeurs toegevoegd</div>}
+      {chauffeurs.map(c=>{
+        const actief_z=zendingen.filter(z=>z.chauffeur_id===c.id&&["onderweg","naar_ophaling","opgehaald","geaccepteerd"].includes(z.status)).length;
+        const totaal_z=zendingen.filter(z=>z.chauffeur_id===c.id).length;
+        return <div key={c.id} style={{...S.card,display:"flex",alignItems:"center",gap:12}}>
+          <div style={{width:44,height:44,borderRadius:2,background:c.actief?"#112D24":"#21262D",color:c.actief?"#3FB950":"#484F58",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:700,flexShrink:0}}>
+            {c.naam.slice(0,2).toUpperCase()}
+          </div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <div style={{fontWeight:600,fontSize:14,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.naam}</div>
+              <span style={{fontSize:10,fontWeight:700,padding:"2px 6px",borderRadius:2,background:c.actief?"#112D24":"#21262D",color:c.actief?"#3FB950":"#484F58"}}>{c.actief?"ACTIEF":"INACTIEF"}</span>
+            </div>
+            <div style={{fontSize:12,color:"#8B949E",marginTop:2}}>{[c.voertuig,c.kenteken].filter(Boolean).join(" · ")||"Geen voertuig"}</div>
+            <div style={{fontSize:11,color:"#484F58",marginTop:1}}>{c.telefoon||""} {c.email?`· ${c.email}`:""}</div>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6,flexShrink:0}}>
+            <div style={{display:"flex",gap:6}}>
+              <span style={{background:"#1A3A5C",color:"#58A6FF",padding:"2px 8px",borderRadius:2,fontSize:11,fontWeight:600}}>{actief_z} actief</span>
+              <span style={{background:"#21262D",color:"#8B949E",padding:"2px 8px",borderRadius:2,fontSize:11,fontWeight:600}}>{totaal_z} totaal</span>
+            </div>
+            <div style={{display:"flex",gap:6}}>
+              <button style={{...S.btnGhost,padding:"4px 8px",fontSize:11,color:c.actief?"#f01e2c":"#3FB950",borderColor:c.actief?"#f01e2c":"#3FB950"}} onClick={()=>toggle(c.id,!c.actief)}>
+                {c.actief?"Deactiveer":"Activeer"}
+              </button>
+              <button style={{...S.btnGhost,padding:"4px 8px",fontSize:11}} onClick={()=>del(c.id)}>✕</button>
+            </div>
+          </div>
+        </div>
+      })}
+    </div>
+
+    {showNew&&<Modal title="Nieuwe chauffeur" onClose={()=>setShowNew(false)}>
+      <Fld l="Naam *" ch={<input style={S.inp} value={form.naam} onChange={e=>setForm(f=>({...f,naam:e.target.value}))}/>}/>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <Fld l="Telefoon" ch={<input style={S.inp} value={form.telefoon} onChange={e=>setForm(f=>({...f,telefoon:e.target.value}))}/>}/>
+        <Fld l="Email" ch={<input style={S.inp} type="email" value={form.email} onChange={e=>setForm(f=>({...f,email:e.target.value}))}/>}/>
+        <Fld l="Voertuig" ch={<input style={S.inp} value={form.voertuig} onChange={e=>setForm(f=>({...f,voertuig:e.target.value}))} placeholder="Auto, motor, bestelwagen..."/>}/>
+        <Fld l="Kenteken" ch={<input style={S.inp} value={form.kenteken} onChange={e=>setForm(f=>({...f,kenteken:e.target.value}))}/>}/>
+        <Fld l="Pincode" ch={<input style={S.inp} type="number" maxLength={6} value={form.pincode} onChange={e=>setForm(f=>({...f,pincode:e.target.value}))} placeholder="bijv. 1234"/>}/>
+      </div>
+      {err&&<div style={{color:"#f01e2c",fontSize:12,marginBottom:10}}>{err}</div>}
+      <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+        <button style={S.btnGhost} onClick={()=>setShowNew(false)}>Annuleren</button>
+        <button style={S.btn} onClick={save} disabled={saving}>{saving?"Opslaan...":"Aanmaken"}</button>
+      </div>
+    </Modal>}
+  </div>
+}
+
+// ── KLANTEN ───────────────────────────────────────────────────────────────────
+function Klanten({klanten,zendingen,onRefresh}){
+  const [showNew,setShowNew]=React.useState(false);
+  const [form,setForm]=React.useState({bedrijfsnaam:"",contactpersoon:"",email:"",telefoon:"",adres:"",stad:"",postcode:""});
+  const [saving,setSaving]=React.useState(false);
+  const [err,setErr]=React.useState("");
+  const [search,setSearch]=React.useState("");
+
+  const filtered=klanten.filter(k=>!search||k.bedrijfsnaam.toLowerCase().includes(search.toLowerCase())||k.stad?.toLowerCase().includes(search.toLowerCase()));
+
+  async function save(){
+    if(!form.bedrijfsnaam){setErr("Bedrijfsnaam is verplicht");return;}
+    setSaving(true);setErr("");
+    try{
+      await db("/klanten",{method:"POST",headers:{Prefer:"return=representation"},body:JSON.stringify(form)});
+      setShowNew(false);setForm({bedrijfsnaam:"",contactpersoon:"",email:"",telefoon:"",adres:"",stad:"",postcode:""});onRefresh();
+    }catch(e){setErr(e.message);}
+    setSaving(false);
+  }
+
+  async function del(id){
+    if(!confirm("Klant verwijderen?"))return;
+    await db(`/klanten?id=eq.${id}`,{method:"DELETE"});onRefresh();
+  }
+
+  return <div style={{display:"flex",flexDirection:"column",gap:14}}>
+    <div className="page-head" style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+      <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:26,letterSpacing:1}}>Klanten</div>
+      <button style={S.btn} onClick={()=>setShowNew(true)}>+ Nieuwe klant</button>
+    </div>
+    <input style={S.inp} placeholder="Zoeken op naam of stad..." value={search} onChange={e=>setSearch(e.target.value)}/>
+    <div style={{display:"flex",flexDirection:"column",gap:8}}>
+      {filtered.length===0&&<div style={{...S.card,color:"#8B949E",textAlign:"center",padding:28,fontSize:13}}>Geen klanten gevonden</div>}
+      {filtered.map(k=>{
+        const cnt=zendingen.filter(z=>z.klant_id===k.id).length;
+        return <div key={k.id} style={{...S.card,display:"flex",alignItems:"center",gap:12}}>
+          <div style={{width:42,height:42,borderRadius:2,background:"#2a0408",color:"#f01e2c",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,flexShrink:0}}>{k.bedrijfsnaam.slice(0,2).toUpperCase()}</div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontWeight:600,fontSize:14,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{k.bedrijfsnaam}</div>
+            <div style={{fontSize:12,color:"#8B949E",marginTop:2}}>{[k.contactpersoon,k.stad].filter(Boolean).join(" · ")}</div>
+            <div style={{fontSize:11,color:"#484F58"}}>{k.email||""}</div>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6,flexShrink:0}}>
+            <span style={{background:"#2a0408",color:"#f01e2c",padding:"2px 8px",borderRadius:2,fontSize:11,fontWeight:600}}>{cnt} zendingen</span>
+            <button style={{...S.btnGhost,padding:"4px 8px",fontSize:11}} onClick={()=>del(k.id)}>✕</button>
+          </div>
+        </div>
+      })}
+    </div>
+    {showNew&&<Modal title="Nieuwe klant" onClose={()=>setShowNew(false)}>
+      <Fld l="Bedrijfsnaam *" ch={<input style={S.inp} value={form.bedrijfsnaam} onChange={e=>setForm(f=>({...f,bedrijfsnaam:e.target.value}))}/>}/>
+      <Fld l="Contactpersoon" ch={<input style={S.inp} value={form.contactpersoon} onChange={e=>setForm(f=>({...f,contactpersoon:e.target.value}))}/>}/>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <Fld l="Email" ch={<input style={S.inp} type="email" value={form.email} onChange={e=>setForm(f=>({...f,email:e.target.value}))}/>}/>
+        <Fld l="Telefoon" ch={<input style={S.inp} value={form.telefoon} onChange={e=>setForm(f=>({...f,telefoon:e.target.value}))}/>}/>
+        <Fld l="Stad" ch={<input style={S.inp} value={form.stad} onChange={e=>setForm(f=>({...f,stad:e.target.value}))}/>}/>
+        <Fld l="Postcode" ch={<input style={S.inp} value={form.postcode} onChange={e=>setForm(f=>({...f,postcode:e.target.value}))}/>}/>
+      </div>
+      <Fld l="Adres" ch={<input style={S.inp} value={form.adres} onChange={e=>setForm(f=>({...f,adres:e.target.value}))}/>}/>
+      {err&&<div style={{color:"#f01e2c",fontSize:12,marginBottom:10}}>{err}</div>}
+      <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+        <button style={S.btnGhost} onClick={()=>setShowNew(false)}>Annuleren</button>
+        <button style={S.btn} onClick={save} disabled={saving}>{saving?"Opslaan...":"Aanmaken"}</button>
+      </div>
+    </Modal>}
+  </div>
+}
+
+// ── DISPATCH ──────────────────────────────────────────────────────────────────
+function Dispatch({zendingen,chauffeurs,onRefresh}){
+  const open=zendingen.filter(z=>!z.chauffeur_id&&!["afgeleverd","voltooid","mislukt","geannuleerd"].includes(z.status));
+  const [sel,setSel]=React.useState({});
+
+  async function assign(zid){
+    const cid=sel[zid];
+    if(!cid){alert("Selecteer een chauffeur");return;}
+    await db(`/zendingen?id=eq.${zid}`,{method:"PATCH",headers:{Prefer:"return=representation"},body:JSON.stringify({chauffeur_id:cid,status:"toegewezen"})});
+    await db("/status_logs",{method:"POST",headers:{Prefer:"return=representation"},body:JSON.stringify({zending_id:zid,status:"toegewezen"})});
+    onRefresh();
+  }
+
+  return <div style={{display:"flex",flexDirection:"column",gap:14}}>
+    <div>
+      <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:26,letterSpacing:1}}>Dispatch</div>
+      <div style={{fontSize:12,color:"#8B949E",marginTop:2}}>Wijs chauffeurs toe aan openstaande zendingen</div>
+    </div>
+
+    {open.length===0&&<div style={{...S.card,textAlign:"center",color:"#3FB950",padding:32,fontSize:14}}>✓ Alle zendingen zijn toegewezen</div>}
+
+    <div style={{display:"flex",flexDirection:"column",gap:8}}>
+      {open.map(z=>{
+        const k=z.ontvanger_naam||"Onbekend";
+        return <div key={z.id} style={{...S.card,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+              <span style={{color:"#f01e2c",fontFamily:"'Bebas Neue',sans-serif",fontSize:15}}>{z.zending_code}</span>
+              <Bdg status={z.status}/>
+              {z.cod_bedrag>0&&<span style={{background:"#2D1D00",color:"#D29922",fontSize:10,fontWeight:700,padding:"2px 6px",borderRadius:2}}>COD SRD {z.cod_bedrag}</span>}
+            </div>
+            <div style={{fontSize:13,color:"#E6EDF3",marginTop:4}}>{k} — {z.afleveradres}</div>
+            <div style={{fontSize:11,color:"#8B949E",marginTop:2}}>{z.district} · {z.diensttype}</div>
+          </div>
+          <div style={{display:"flex",gap:8,alignItems:"center",flexShrink:0}}>
+            <select style={{...S.sel,width:180}} value={sel[z.id]||""} onChange={e=>setSel(s=>({...s,[z.id]:e.target.value}))}>
+              <option value="">Chauffeur...</option>
+              {chauffeurs.filter(c=>c.actief).map(c=><option key={c.id} value={c.id}>{c.naam}</option>)}
+            </select>
+            <button style={S.btn} onClick={()=>assign(z.id)}>Toewijzen</button>
+          </div>
+        </div>
+      })}
+    </div>
+
+    <div>
+      <div style={{fontSize:13,fontWeight:600,marginBottom:10}}>Actieve ritten per chauffeur</div>
+      <div style={{display:"flex",flexDirection:"column",gap:8}}>
+        {chauffeurs.filter(c=>c.actief).map(c=>{
+          const ritten=zendingen.filter(z=>z.chauffeur_id===c.id&&["toegewezen","geaccepteerd","naar_ophaling","opgehaald","onderweg","aangekomen"].includes(z.status));
+          return <div key={c.id} style={S.card}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:ritten.length>0?10:0}}>
+              <div style={{width:8,height:8,borderRadius:"50%",background:"#3FB950"}}/>
+              <div style={{fontWeight:600,fontSize:13}}>{c.naam}</div>
+              <span style={{fontSize:11,color:"#8B949E"}}>{c.voertuig||""}</span>
+              <span style={{marginLeft:"auto",background:"#1A3A5C",color:"#58A6FF",fontSize:11,fontWeight:600,padding:"2px 7px",borderRadius:2}}>{ritten.length} rit{ritten.length!==1?"ten":""}</span>
+            </div>
+            {ritten.map(z=><div key={z.id} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 0",borderTop:"1px solid #21262D",fontSize:12}}>
+              <span style={{color:"#f01e2c",fontFamily:"'Bebas Neue',sans-serif",fontSize:13}}>{z.zending_code}</span>
+              <span style={{color:"#C9D1D9",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{z.afleveradres}</span>
+              <Bdg status={z.status} short/>
+            </div>)}
+          </div>
+        })}
+      </div>
+    </div>
+  </div>
+}
+
+
+// ── ADMIN LOGIN ───────────────────────────────────────────────────────────────
+const ADMIN_USER = "admin";
+const ADMIN_PASS = "Sologics2026";
+
+function AdminLogin({onLogin}){
+  const [user,setUser]=React.useState("");
+  const [pass,setPass]=React.useState("");
+  const [err,setErr]=React.useState("");
+  const [show,setShow]=React.useState(false);
+
+  async function login(){
+    if(!user||!pass){setErr("Vul alle velden in");return;}
+    // Probeer eerst hardcoded admin
+    if(user===ADMIN_USER&&pass===ADMIN_PASS){
+      const g={naam:"Admin",gebruikersnaam:"admin",rol:"admin"};
+      sessionStorage.setItem("sl_admin","1");
+      sessionStorage.setItem("sl_gebruiker",JSON.stringify(g));
+      onLogin(g);return;
+    }
+    // Dan database
+    try{
+      const r=await db(`/gebruikers?gebruikersnaam=eq.${encodeURIComponent(user)}&wachtwoord=eq.${encodeURIComponent(pass)}&actief=eq.true&select=*`);
+      if(r&&r.length>0){
+        sessionStorage.setItem("sl_admin","1");
+        sessionStorage.setItem("sl_gebruiker",JSON.stringify(r[0]));
+        onLogin(r[0]);
+      } else {
+        setErr("Onjuiste gebruikersnaam of wachtwoord");
+      }
+    }catch(e){setErr("Inloggen mislukt");}
+  }
+
+  return <div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24,background:"#0D1117"}}>
+    <div style={{display:"flex",alignItems:"center",fontFamily:"'Bebas Neue',sans-serif",fontSize:36,letterSpacing:1,lineHeight:1,marginBottom:6}}>
+      <span style={{color:"#fff",background:"#1a1a1a",padding:"5px 11px",fontWeight:700,letterSpacing:"0.05em",border:"1px solid #333"}}>SO</span><span style={{color:"#fff",background:"#8B1020",padding:"5px 11px",border:"2px solid #6a0d18",fontWeight:700,letterSpacing:"0.15em"}}>LOGICS</span>
+    </div>
+    <div style={{fontSize:12,color:"#8B949E",marginBottom:40,letterSpacing:"0.1em",textTransform:"uppercase"}}>Admin Dashboard</div>
+
+    <div style={{width:"100%",maxWidth:360,background:"#161B22",border:"1px solid #21262D",borderRadius:4,padding:24}}>
+      <div style={{marginBottom:16}}>
+        <label style={{fontSize:11,color:"#8B949E",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6,display:"block"}}>Gebruikersnaam</label>
+        <input style={{width:"100%",background:"#0D1117",border:"1px solid #30363D",borderRadius:2,color:"#E6EDF3",padding:"11px 12px",fontSize:14,outline:"none",fontFamily:"'DM Sans',sans-serif"}}
+          value={user} onChange={e=>setUser(e.target.value)} onKeyDown={e=>e.key==="Enter"&&login()} placeholder="admin"/>
+      </div>
+      <div style={{marginBottom:20}}>
+        <label style={{fontSize:11,color:"#8B949E",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6,display:"block"}}>Wachtwoord</label>
+        <div style={{position:"relative"}}>
+          <input style={{width:"100%",background:"#0D1117",border:"1px solid #30363D",borderRadius:2,color:"#E6EDF3",padding:"11px 40px 11px 12px",fontSize:14,outline:"none",fontFamily:"'DM Sans',sans-serif"}}
+            type={show?"text":"password"} value={pass} onChange={e=>setPass(e.target.value)} onKeyDown={e=>e.key==="Enter"&&login()} placeholder="••••••••"/>
+          <button onClick={()=>setShow(s=>!s)} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#8B949E",cursor:"pointer",fontSize:16}}>
+            {show?"🙈":"👁"}
+          </button>
+        </div>
+      </div>
+      {err&&<div style={{background:"#2a0408",border:"1px solid #f01e2c",borderRadius:2,padding:"8px 12px",color:"#f01e2c",fontSize:12,marginBottom:14}}>{err}</div>}
+      <button onClick={login} style={{width:"100%",background:"#f01e2c",color:"#fff",border:"none",borderRadius:2,padding:"13px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>
+        Inloggen →
+      </button>
+    </div>
+    <div style={{marginTop:16,fontSize:11,color:"#484F58"}}>SOlogics Suriname © 2026</div>
+  </div>
+}
+
+
+// ── RAPPORTAGES ───────────────────────────────────────────────────────────────
+function Rapportages({zendingen,chauffeurs}){
+  const [periode,setPeriode]=React.useState("vandaag");
+
+  const nu=new Date();
+  const filtered=zendingen.filter(z=>{
+    const d=new Date(z.aangemaakt_op);
+    if(periode==="vandaag") return d.toDateString()===nu.toDateString();
+    if(periode==="week"){
+      const week=new Date(nu);week.setDate(nu.getDate()-7);
+      return d>=week;
+    }
+    if(periode==="maand"){
+      return d.getMonth()===nu.getMonth()&&d.getFullYear()===nu.getFullYear();
+    }
+    return true;
+  });
+
+  const afgeleverd=filtered.filter(z=>z.status==="afgeleverd"||z.status==="voltooid");
+  const mislukt=filtered.filter(z=>z.status==="mislukt");
+  const onderweg=filtered.filter(z=>z.status==="onderweg");
+  const succes=filtered.length>0?Math.round((afgeleverd.length/filtered.length)*100):0;
+  const cod_totaal=filtered.filter(z=>z.cod_bedrag>0).reduce((a,z)=>a+parseFloat(z.cod_bedrag||0),0);
+  const cod_ontvangen=filtered.filter(z=>z.cod_ontvangen).reduce((a,z)=>a+parseFloat(z.cod_bedrag||0),0);
+  const cod_open=cod_totaal-cod_ontvangen;
+
+  // Per chauffeur stats
+  const chStats=chauffeurs.map(c=>{
+    const cz=filtered.filter(z=>z.chauffeur_id===c.id);
+    const ca=cz.filter(z=>z.status==="afgeleverd"||z.status==="voltooid");
+    const cm=cz.filter(z=>z.status==="mislukt");
+    const ccod=cz.filter(z=>z.cod_ontvangen).reduce((a,z)=>a+parseFloat(z.cod_bedrag||0),0);
+    return {...c,totaal:cz.length,afgeleverd:ca.length,mislukt:cm.length,cod:ccod,succes:cz.length>0?Math.round((ca.length/cz.length)*100):0};
+  }).filter(c=>c.totaal>0).sort((a,b)=>b.totaal-a.totaal);
+
+  // Per district
+  const districts=[...new Set(filtered.map(z=>z.district).filter(Boolean))];
+  const distStats=districts.map(d=>{
+    const dz=filtered.filter(z=>z.district===d);
+    return {district:d,totaal:dz.length,afgeleverd:dz.filter(z=>["afgeleverd","voltooid"].includes(z.status)).length};
+  }).sort((a,b)=>b.totaal-a.totaal);
+
+  return <div style={{display:"flex",flexDirection:"column",gap:16}}>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:10}}>
+      <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:26,letterSpacing:1}}>Rapportages</div>
+      <div style={{display:"flex",gap:3,background:"#0D1117",padding:3,borderRadius:2}}>
+        {[{id:"vandaag",l:"Vandaag"},{id:"week",l:"Week"},{id:"maand",l:"Maand"},{id:"alles",l:"Alles"}].map(p=>
+          <button key={p.id} onClick={()=>setPeriode(p.id)} style={{padding:"6px 12px",borderRadius:2,fontSize:12,cursor:"pointer",border:"none",fontFamily:"'DM Sans',sans-serif",background:periode===p.id?"#161B22":"transparent",color:periode===p.id?"#f01e2c":"#8B949E",fontWeight:periode===p.id?700:400}}>
+            {p.l}
+          </button>
+        )}
+      </div>
+    </div>
+
+    {/* KPI stats */}
+    <div className="stats-grid" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
+      {[
+        {l:"Totaal zendingen",v:filtered.length,c:"#E6EDF3"},
+        {l:"Afgeleverd",v:afgeleverd.length,c:"#3FB950"},
+        {l:"Mislukt",v:mislukt.length,c:mislukt.length>0?"#f01e2c":"#8B949E"},
+        {l:"Succespercentage",v:`${succes}%`,c:succes>=80?"#3FB950":succes>=60?"#D29922":"#f01e2c"},
+      ].map(s=><div key={s.l} style={{background:"#161B22",border:"1px solid #21262D",borderTop:"2px solid #f01e2c",borderRadius:2,padding:"12px 10px"}}>
+        <div style={{fontSize:10,color:"#8B949E",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.05em",lineHeight:1.3}}>{s.l}</div>
+        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:34,color:s.c,lineHeight:1,marginTop:4}}>{s.v}</div>
+      </div>)}
+    </div>
+
+    {/* COD overzicht */}
+    <div style={{background:"#161B22",border:"1px solid #21262D",borderRadius:2,padding:16}}>
+      <div style={{fontSize:13,fontWeight:600,marginBottom:12}}>💰 COD Rembours Overzicht</div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
+        {[
+          {l:"Totaal COD",v:`SRD ${cod_totaal.toFixed(2)}`,c:"#E6EDF3"},
+          {l:"Ontvangen",v:`SRD ${cod_ontvangen.toFixed(2)}`,c:"#3FB950"},
+          {l:"Nog open",v:`SRD ${cod_open.toFixed(2)}`,c:cod_open>0?"#D29922":"#3FB950"},
+        ].map(s=><div key={s.l} style={{background:"#0D1117",borderRadius:2,padding:"10px 12px"}}>
+          <div style={{fontSize:10,color:"#8B949E",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.05em"}}>{s.l}</div>
+          <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:22,color:s.c,marginTop:4}}>{s.v}</div>
+        </div>)}
+      </div>
+    </div>
+
+    {/* Chauffeur prestaties */}
+    <div style={{background:"#161B22",border:"1px solid #21262D",borderRadius:2,padding:16}}>
+      <div style={{fontSize:13,fontWeight:600,marginBottom:12}}>🚚 Chauffeur Prestaties</div>
+      {chStats.length===0&&<div style={{color:"#8B949E",fontSize:13}}>Geen data voor deze periode</div>}
+      <div style={{overflowX:"auto"}}>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:13,minWidth:400}}>
+          <thead style={{background:"#0D1117"}}>
+            <tr>
+              {["Chauffeur","Totaal","Afgelev.","Mislukt","Succes%","COD ontvangen"].map(h=>
+                <th key={h} style={{textAlign:"left",padding:"8px 12px",fontSize:10,fontWeight:700,color:"#8B949E",textTransform:"uppercase",letterSpacing:"0.06em",borderBottom:"1px solid #21262D",whiteSpace:"nowrap"}}>{h}</th>
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {chStats.map(c=><tr key={c.id}>
+              <td style={{padding:"10px 12px",color:"#E6EDF3",fontWeight:500}}>{c.naam}</td>
+              <td style={{padding:"10px 12px",color:"#C9D1D9"}}>{c.totaal}</td>
+              <td style={{padding:"10px 12px",color:"#3FB950",fontWeight:600}}>{c.afgeleverd}</td>
+              <td style={{padding:"10px 12px",color:c.mislukt>0?"#f01e2c":"#8B949E"}}>{c.mislukt}</td>
+              <td style={{padding:"10px 12px"}}>
+                <span style={{background:c.succes>=80?"#112D24":c.succes>=60?"#2D1D00":"#2a0408",color:c.succes>=80?"#3FB950":c.succes>=60?"#D29922":"#f01e2c",padding:"2px 8px",borderRadius:2,fontSize:11,fontWeight:700}}>{c.succes}%</span>
+              </td>
+              <td style={{padding:"10px 12px",color:"#D29922",fontWeight:600}}>SRD {c.cod.toFixed(2)}</td>
+            </tr>)}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    {/* District verdeling */}
+    {distStats.length>0&&<div style={{background:"#161B22",border:"1px solid #21262D",borderRadius:2,padding:16}}>
+      <div style={{fontSize:13,fontWeight:600,marginBottom:12}}>📍 Per District</div>
+      {distStats.map(d=>{
+        const pct=d.totaal>0?Math.round((d.afgeleverd/d.totaal)*100):0;
+        return <div key={d.district} style={{marginBottom:10}}>
+          <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}>
+            <span style={{color:"#E6EDF3",fontWeight:500}}>{d.district}</span>
+            <span style={{color:"#8B949E"}}>{d.afgeleverd}/{d.totaal} · {pct}%</span>
+          </div>
+          <div style={{height:4,background:"#21262D",borderRadius:2}}>
+            <div style={{height:4,width:`${pct}%`,background:pct>=80?"#3FB950":pct>=60?"#D29922":"#f01e2c",borderRadius:2}}/>
+          </div>
+        </div>
+      })}
+    </div>}
+
+    {/* COD per chauffeur detail */}
+    {chStats.filter(c=>c.cod>0).length>0&&<div style={{background:"#161B22",border:"1px solid #21262D",borderRadius:2,padding:16}}>
+      <div style={{fontSize:13,fontWeight:600,marginBottom:12}}>💵 COD Afrekening per Chauffeur</div>
+      {chStats.filter(c=>c.cod>0).map(c=><div key={c.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 0",borderBottom:"1px solid #21262D",fontSize:13}}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <div style={{width:32,height:32,borderRadius:2,background:"#112D24",color:"#3FB950",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700}}>{c.naam.slice(0,2).toUpperCase()}</div>
+          <span style={{fontWeight:500}}>{c.naam}</span>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <span style={{color:"#3FB950",fontWeight:700,fontSize:15}}>SRD {c.cod.toFixed(2)}</span>
+          <span style={{background:"#112D24",color:"#3FB950",fontSize:10,fontWeight:700,padding:"2px 6px",borderRadius:2}}>ONTVANGEN</span>
+        </div>
+      </div>)}
+    </div>}
+  </div>
+}
+
+// ── ROOT ──────────────────────────────────────────────────────────────────────
+function App(){
+  const [loggedIn,setLoggedIn]=React.useState(()=>sessionStorage.getItem("sl_admin")==="1");
+  const [gebruiker,setGebruiker]=React.useState(()=>{
+    try{const s=sessionStorage.getItem("sl_gebruiker");return s?JSON.parse(s):{naam:"Admin",rol:"admin"};}catch(e){return {naam:"Admin",rol:"admin"};}
+  });
+  const [page,setPage]=React.useState("dashboard");
+  const [zendingen,setZendingen]=React.useState([]);
+  const [chauffeurs,setChauffeurs]=React.useState([]);
+  const [klanten,setKlanten]=React.useState([]);
+  const [loading,setLoading]=React.useState(true);
+  const [error,setError]=React.useState("");
+
+  const rol=gebruiker?.rol||"admin";
+  const isAdmin=rol==="admin";
+  const isManager=rol==="admin"||rol==="manager";
+  const isDispatcher=true;
+
+  function uitloggen(){sessionStorage.clear();setLoggedIn(false);}
+
+  async function load(){
+    setLoading(true);
+    try{
+      const [z,c,k]=await Promise.all([
+        db("/zendingen?select=*&order=aangemaakt_op.desc"),
+        db("/chauffeurs?select=*&order=naam.asc"),
+        db("/klanten?select=*&order=bedrijfsnaam.asc"),
+      ]);
+      setZendingen(z||[]);setChauffeurs(c||[]);setKlanten(k||[]);setError("");
+    }catch(e){setError("Verbindingsfout: "+e.message);}
+    setLoading(false);
+  }
+
+  React.useEffect(()=>{if(loggedIn)load();},[loggedIn]);
+
+  if(!loggedIn)return <AdminLogin onLogin={(g)=>{setLoggedIn(true);if(g)setGebruiker(g);}}/>;
+
+  const open_dispatch=zendingen.filter(z=>!z.chauffeur_id&&!["afgeleverd","voltooid","mislukt"].includes(z.status)).length;
+
+  const nav=[
+    {id:"dashboard",icon:"▦",label:"Dashboard"},
+    {id:"zendingen",icon:"↗",label:"Zendingen",badge:zendingen.filter(z=>z.status==="aangemaakt").length},
+    {id:"dispatch",icon:"⊹",label:"Dispatch",badge:open_dispatch},
+    ...(isManager?[
+      {id:"chauffeurs",icon:"◉",label:"Chauffeurs"},
+      {id:"klanten",icon:"◈",label:"Klanten"},
+      {id:"rapportages",icon:"📊",label:"Rapportages"},
+    ]:[]),
+    ...(isAdmin?[{id:"gebruikers",icon:"👥",label:"Gebruikers"}]:[]),
+  ];
+
+  return <div style={{fontFamily:"'DM Sans',sans-serif",background:"#0D1117",color:"#E6EDF3",minHeight:"100vh",display:"flex",flexDirection:"column"}}>
+
+    {/* TOPBAR */}
+    <div style={{background:"#111",borderBottom:"2px solid #8B1020",padding:"0 16px",display:"flex",alignItems:"center",justifyContent:"space-between",height:54,flexShrink:0,position:"sticky",top:0,zIndex:40}}>
+      <div style={{display:"flex",alignItems:"center",fontFamily:"'Bebas Neue',sans-serif",fontSize:26,letterSpacing:1,lineHeight:1}}>
+        <span style={{color:"#fff",background:"#1a1a1a",padding:"4px 10px",fontWeight:700,letterSpacing:"0.05em",border:"1px solid #333"}}>SO</span><span style={{color:"#fff",background:"#8B1020",padding:"4px 10px",border:"2px solid #6a0d18",fontWeight:700,letterSpacing:"0.15em"}}>LOGICS</span>
+      </div>
+      <div style={{display:"flex",alignItems:"center",gap:8}}>
+        <div style={{width:7,height:7,borderRadius:"50%",background:error?"#f01e2c":"#3FB950"}}/>
+        <span style={{fontSize:11,color:"#8B949E"}}>{error?"Offline":"Live"}</span>
+        <button onClick={load} style={{...S.btnGhost,padding:"5px 10px",fontSize:12}}>↺</button>
+        <div style={{fontSize:11,color:"#8B949E",display:"flex",flexDirection:"column",alignItems:"flex-end"}}>
+          <span style={{color:"#E6EDF3",fontWeight:600}}>{gebruiker?.naam||"Admin"}</span>
+          <span style={{color:"#f01e2c",fontSize:10,textTransform:"uppercase"}}>{gebruiker?.rol||"admin"}</span>
+        </div>
+        <button onClick={uitloggen} style={{...S.btnGhost,padding:"5px 10px",fontSize:12,color:"#f01e2c",borderColor:"#f01e2c"}}>Uitloggen</button>
+      </div>
+    </div>
+
+    <div style={{display:"flex",flex:1,overflow:"hidden",height:"calc(100vh - 54px)"}}>
+
+      {/* SIDEBAR */}
+      <div className="sidebar" style={{width:190,background:"#161B22",borderRight:"1px solid #21262D",padding:"12px 10px",display:"flex",flexDirection:"column",gap:2,flexShrink:0,overflowY:"auto"}}>
+        <div style={{fontSize:10,fontWeight:600,color:"#484F58",letterSpacing:"0.08em",textTransform:"uppercase",padding:"10px 10px 6px"}}>Menu</div>
+        {nav.map(n=><div key={n.id} onClick={()=>setPage(n.id)} style={{display:"flex",alignItems:"center",gap:9,padding:"9px 10px",borderRadius:2,fontSize:13,cursor:"pointer",color:page===n.id?"#f01e2c":"#8B949E",background:page===n.id?"#2a0408":"transparent",borderLeft:page===n.id?"2px solid #f01e2c":"2px solid transparent",transition:"all .1s"}}>
+          <span style={{fontSize:15}}>{n.icon}</span>
+          <span>{n.label}</span>
+          {n.badge>0&&<span style={{marginLeft:"auto",background:"#f01e2c",color:"#fff",fontSize:10,fontWeight:700,padding:"1px 6px",borderRadius:2}}>{n.badge}</span>}
+        </div>)}
+      </div>
+
+      {/* MAIN */}
+      <div className="main-wrap" style={{flex:1,overflowY:"auto",padding:18,display:"flex",flexDirection:"column",gap:16}}>
+        {(()=>{const nu=new Date();const sur=new Date(nu.toLocaleString('en-US',{timeZone:'America/Paramaribo'}));return sur.getHours()>=15?<div style={{background:"#2a0408",border:"2px solid #f01e2c",borderRadius:4,padding:"12px 16px",display:"flex",alignItems:"center",gap:12,marginBottom:4}}><span style={{fontSize:20}}>⚠️</span><div><div style={{fontWeight:700,fontSize:13,color:"#f01e2c"}}>CUT-OFF TIJD — 15:00 VERSTREKEN</div><div style={{fontSize:11,color:"#C9D1D9",marginTop:1}}>Orders die nu aangemaakt worden, worden morgen verwerkt.</div></div><div style={{marginLeft:"auto",fontFamily:"'Bebas Neue',sans-serif",fontSize:26,color:"#f01e2c"}}>{sur.getHours()}:{String(sur.getMinutes()).padStart(2,"0")}</div></div>:null;})()}
+        {error&&<div style={{background:"#2a0408",border:"1px solid #f01e2c",borderRadius:2,padding:12,color:"#f01e2c",fontSize:13}}>{error}</div>}
+        {loading
+          ?<div style={{color:"#8B949E",textAlign:"center",marginTop:60,fontSize:14}}>Laden...</div>
+          :<>
+            {page==="dashboard"&&<Dashboard zendingen={zendingen} chauffeurs={chauffeurs} klanten={klanten}/>}
+            {page==="zendingen"&&<Zendingen zendingen={zendingen} chauffeurs={chauffeurs} klanten={klanten} onRefresh={load}/>}
+            {page==="dispatch"&&<Dispatch zendingen={zendingen} chauffeurs={chauffeurs} onRefresh={load}/>}
+            {page==="chauffeurs"&&<Chauffeurs chauffeurs={chauffeurs} zendingen={zendingen} onRefresh={load}/>}
+            {page==="klanten"&&<Klanten klanten={klanten} zendingen={zendingen} onRefresh={load}/>}
+            {page==="rapportages"&&<Rapportages zendingen={zendingen} chauffeurs={chauffeurs}/>}
+            {page==="gebruikers"&&<Gebruikers/>}
+          </>
+        }
+      </div>
+    </div>
+
+    {/* MOBILE BOTTOM NAV */}
+    <div className="bottom-nav" style={{display:"none",position:"fixed",bottom:0,left:0,right:0,background:"#161B22",borderTop:"2px solid #f01e2c",zIndex:50,height:62}}>
+      {nav.map(n=><button key={n.id} onClick={()=>setPage(n.id)} style={{flex:1,background:"none",border:"none",color:page===n.id?"#f01e2c":"#8B949E",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,fontFamily:"'DM Sans',sans-serif",position:"relative",padding:0,minWidth:0}}>
+        <span style={{fontSize:19}}>{n.icon}</span>
+        <span style={{fontSize:9,fontWeight:600}}>{n.label}</span>
+        {n.badge>0&&<span style={{position:"absolute",top:5,right:"calc(50% - 18px)",background:"#f01e2c",color:"#fff",fontSize:8,fontWeight:700,padding:"1px 4px",borderRadius:8,minWidth:14,textAlign:"center"}}>{n.badge}</span>}
+      </button>)}
+    </div>
+
+  </div>
+}
+
+
+// ── GEBRUIKERS ────────────────────────────────────────────────────────────────
+function Gebruikers(){
+  const [lijst,setLijst]=React.useState([]);
+  const [showNew,setShowNew]=React.useState(false);
+  const [form,setForm]=React.useState({naam:"",gebruikersnaam:"",wachtwoord:"",rol:"dispatcher"});
+  const [saving,setSaving]=React.useState(false);
+
+  React.useEffect(()=>{load();},[]);
+
+  async function load(){
+    const r=await db("/gebruikers?order=aangemaakt_op.asc&select=*");
+    setLijst(r||[]);
+  }
+
+  async function save(){
+    if(!form.naam||!form.gebruikersnaam||!form.wachtwoord)return;
+    setSaving(true);
+    try{
+      await db("/gebruikers",{method:"POST",headers:{Prefer:"return=representation"},body:JSON.stringify(form)});
+      setShowNew(false);setForm({naam:"",gebruikersnaam:"",wachtwoord:"",rol:"dispatcher"});load();
+    }catch(e){alert("Fout: "+e.message);}
+    setSaving(false);
+  }
+
+  async function toggle(g){
+    await db(`/gebruikers?id=eq.${g.id}`,{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({actief:!g.actief})});
+    load();
+  }
+
+  const ROL_C={admin:{bg:"#2a0408",c:"#f01e2c"},manager:{bg:"#112d24",c:"#3FB950"},dispatcher:{bg:"#1a2332",c:"#58a6ff"}};
+
+  return <div style={{display:"flex",flexDirection:"column",gap:14}}>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+      <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:26,letterSpacing:1}}>Gebruikers</div>
+      <button style={S.btn} onClick={()=>setShowNew(true)}>+ Nieuwe gebruiker</button>
+    </div>
+    <div style={{background:"#161B22",border:"1px solid #21262D",borderRadius:2,overflow:"hidden"}}>
+      <table style={{width:"100%",borderCollapse:"collapse"}}>
+        <thead style={{background:"#0D1117"}}>
+          <tr>{["Naam","Gebruikersnaam","Rol","Status",""].map(h=><th key={h} style={{...S.th,padding:"10px 14px"}}>{h}</th>)}</tr>
+        </thead>
+        <tbody>
+          {lijst.map(g=><tr key={g.id}>
+            <td style={{...S.td,padding:"12px 14px",fontWeight:600}}>{g.naam}</td>
+            <td style={{...S.td,padding:"12px 14px",color:"#8B949E"}}>{g.gebruikersnaam}</td>
+            <td style={{...S.td,padding:"12px 14px"}}>
+              <span style={{background:ROL_C[g.rol]?.bg||"#21262D",color:ROL_C[g.rol]?.c||"#8B949E",padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:700}}>{g.rol}</span>
+            </td>
+            <td style={{...S.td,padding:"12px 14px",color:g.actief?"#3FB950":"#8B949E",fontWeight:600,fontSize:12}}>{g.actief?"Actief":"Inactief"}</td>
+            <td style={{...S.td,padding:"12px 14px"}}>
+              <button onClick={()=>toggle(g)} style={{...S.btnGhost,fontSize:11,padding:"4px 10px",color:g.actief?"#f01e2c":"#3FB950",borderColor:g.actief?"#f01e2c":"#3FB950"}}>{g.actief?"Deactiveren":"Activeren"}</button>
+            </td>
+          </tr>)}
+        </tbody>
+      </table>
+    </div>
+    {showNew&&<Modal title="Nieuwe gebruiker" onClose={()=>setShowNew(false)}>
+      <div style={{display:"flex",flexDirection:"column",gap:12}}>
+        <Fld l="Naam" ch={<input style={S.inp} value={form.naam} onChange={e=>setForm(f=>({...f,naam:e.target.value}))} placeholder="Volledige naam"/>}/>
+        <Fld l="Gebruikersnaam" ch={<input style={S.inp} value={form.gebruikersnaam} onChange={e=>setForm(f=>({...f,gebruikersnaam:e.target.value}))} placeholder="bijv: dispatcher1"/>}/>
+        <Fld l="Wachtwoord" ch={<input style={S.inp} value={form.wachtwoord} onChange={e=>setForm(f=>({...f,wachtwoord:e.target.value}))} placeholder="Wachtwoord"/>}/>
+        <Fld l="Rol" ch={<select style={S.sel} value={form.rol} onChange={e=>setForm(f=>({...f,rol:e.target.value}))}>
+          <option value="admin">Admin — Volledige toegang</option>
+          <option value="manager">Manager — Beheer + rapportages</option>
+          <option value="dispatcher">Dispatcher — Alleen dispatch</option>
+        </select>}/>
+        <div style={{display:"flex",justifyContent:"flex-end",marginTop:8}}>
+          <button style={S.btn} onClick={save} disabled={saving}>{saving?"Opslaan...":"Aanmaken"}</button>
+        </div>
+      </div>
+    </Modal>}
+  </div>
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
