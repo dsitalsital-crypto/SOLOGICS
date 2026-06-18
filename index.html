@@ -288,8 +288,24 @@ function Zendingen({zendingen,chauffeurs,klanten,onRefresh}){
     if(adres.length>5){
       setBerekenend(true);
       const p=await berekenPrijs(adres);
-      setPrijsInfo(p);
-      if(p)setForm(f=>({...f,afleveradres:adres,prijs_srd:p.prijs,afstand_km:p.km}));
+      if(p){
+        // Check of klant deze maand korting heeft (10+ leveringen)
+        let prijs=p.prijs;
+        let korting=null;
+        if(form.klant_id){
+          const nu=new Date();
+          const maandStart=new Date(nu.getFullYear(),nu.getMonth(),1).toISOString();
+          const tellingen=zendingen.filter(z=>z.klant_id===form.klant_id&&z.aangemaakt_op>=maandStart).length;
+          if(tellingen>=10){
+            korting=Math.round(p.prijs*0.05*100)/100;
+            prijs=Math.round((p.prijs-korting)*100)/100;
+          }
+        }
+        setPrijsInfo({...p,prijs,prijsOrigineel:p.prijs,korting});
+        setForm(f=>({...f,afleveradres:adres,prijs_srd:prijs,afstand_km:p.km}));
+      } else {
+        setPrijsInfo(null);
+      }
       setBerekenend(false);
     }
   }
@@ -562,9 +578,15 @@ function Zendingen({zendingen,chauffeurs,klanten,onRefresh}){
       <Fld l="Ophaaladres" ch={<input style={S.inp} value={form.ophaaladres} onChange={e=>setForm(f=>({...f,ophaaladres:e.target.value}))} placeholder="Adres van afhalen"/>}/>
       <Fld l="Afleveradres *" ch={<input style={S.inp} value={form.afleveradres} onChange={e=>updateAfleveradres(e.target.value)} placeholder="Adres van bezorgen"/>}/>
       {berekenend&&<div style={{fontSize:12,color:"#8B949E",marginBottom:8}}>⏳ Prijs berekenen...</div>}
-      {prijsInfo&&<div style={{background:"#112D24",border:"1px solid #3FB950",borderRadius:2,padding:"10px 12px",marginBottom:10,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-        <div style={{fontSize:12,color:"#3FB950"}}>📍 {prijsInfo.km} km van Marowijnestraat 84a</div>
-        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:20,color:"#3FB950"}}>SRD {prijsInfo.prijs}</div>
+      {prijsInfo&&<div style={{background:"#112D24",border:"1px solid #3FB950",borderRadius:2,padding:"10px 12px",marginBottom:10}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div style={{fontSize:12,color:"#3FB950"}}>📍 {prijsInfo.km} km van Marowijnestraat 84a</div>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            {prijsInfo.korting&&<span style={{fontSize:13,color:"#8B949E",textDecoration:"line-through"}}>SRD {prijsInfo.prijsOrigineel}</span>}
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:20,color:"#3FB950"}}>SRD {prijsInfo.prijs}</div>
+          </div>
+        </div>
+        {prijsInfo.korting&&<div style={{fontSize:11,color:"#D29922",marginTop:4,fontWeight:600}}>🎉 5% trouwe klant korting toegepast (10+ leveringen deze maand) — SRD {prijsInfo.korting} bespaard</div>}
       </div>}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
         <Fld l="Pakkettype" ch={<input style={S.inp} value={form.pakkettype} onChange={e=>setForm(f=>({...f,pakkettype:e.target.value}))} placeholder="Doos, tas..."/>}/>
