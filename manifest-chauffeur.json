@@ -2,7 +2,7 @@
   "name": "SOlogics Chauffeur",
   "short_name": "SOlogics",
   "description": "SOlogics chauffeur app",
-  "start_url": "/SOLOGICS/chauffeur.html",
+  "start_url": "/chauffeur.html",
   "display": "standalone",
   "background_color": "#0D1117",
   "theme_color": "#f01e2c",
