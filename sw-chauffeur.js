@@ -3,7 +3,7 @@ const OFFLINE_QUEUE_KEY = "sl_offline_queue";
 
 // Bestanden om te cachen voor offline gebruik
 const ASSETS = [
-  "/SOLOGICS/chauffeur.html",
+  "/chauffeur.html",
   "https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Bebas+Neue&display=swap",
   "https://unpkg.com/react@18/umd/react.production.min.js",
   "https://unpkg.com/react-dom@18/umd/react-dom.production.min.js",
