@@ -1180,7 +1180,7 @@ function App(){
       {id:"klanten",icon:"◈",label:"Klanten"},
       {id:"rapportages",icon:"📊",label:"Rapportages"},
     ]:[]),
-    ...(isAdmin?[{id:"gebruikers",icon:"👥",label:"Gebruikers"}]:[]),
+    ...(isAdmin?[{id:"gebruikers",icon:"👥",label:"Gebruikers"},{id:"integraties",icon:"🔌",label:"Integraties"}]:[]),
   ];
 
   return <div style={{fontFamily:"'DM Sans',sans-serif",background:"#0D1117",color:"#E6EDF3",minHeight:"100vh",display:"flex",flexDirection:"column"}}>
@@ -1228,6 +1228,7 @@ function App(){
             {page==="klanten"&&<Klanten klanten={klanten} zendingen={zendingen} onRefresh={load}/>}
             {page==="rapportages"&&<Rapportages zendingen={zendingen} chauffeurs={chauffeurs}/>}
             {page==="gebruikers"&&<Gebruikers/>}
+            {page==="integraties"&&<Integraties/>}
           </>
         }
       </div>
@@ -1247,6 +1248,63 @@ function App(){
 
 
 // ── GEBRUIKERS ────────────────────────────────────────────────────────────────
+
+// ── INTEGRATIES ───────────────────────────────────────────────────────────────
+function Integraties(){
+  const [qb,setQb]=React.useState(null);
+  const [loading,setLoading]=React.useState(true);
+
+  React.useEffect(()=>{load();},[]);
+
+  async function load(){
+    try{
+      const r=await db("/qb_connectie?select=*&limit=1");
+      setQb(r&&r[0]?r[0]:null);
+    }catch(e){}
+    setLoading(false);
+  }
+
+  function connectQB(){
+    const QB_CLIENT_ID="ABMRpAfiYYjz6kl5PbtEkDYxsClgxFpeQ7626cAPrvUZcbbkkC";
+    const REDIRECT="https://sologics.site/qb-callback.html";
+    const scope="com.intuit.quickbooks.accounting";
+    const state=Math.random().toString(36).slice(2);
+    const url=`https://appcenter.intuit.com/connect/oauth2?client_id=${QB_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT)}&response_type=code&scope=${encodeURIComponent(scope)}&state=${state}`;
+    window.location.href=url;
+  }
+
+  async function disconnectQB(){
+    if(!confirm("QuickBooks koppeling verbreken?"))return;
+    await db(`/qb_connectie?id=eq.${qb.id}`,{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({verbonden:false})});
+    load();
+  }
+
+  return <div style={{display:"flex",flexDirection:"column",gap:14}}>
+    <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:26,letterSpacing:1}}>Integraties</div>
+
+    <div style={{...S.card,display:"flex",alignItems:"center",gap:16}}>
+      <div style={{width:48,height:48,borderRadius:8,background:"#2CA01C",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0}}>📊</div>
+      <div style={{flex:1}}>
+        <div style={{fontWeight:700,fontSize:15}}>QuickBooks Online</div>
+        <div style={{fontSize:12,color:"#8B949E",marginTop:2}}>
+          {loading?"Laden...":qb?.verbonden?"✓ Gekoppeld — nieuwe zendingen worden automatisch gefactureerd":"Niet gekoppeld"}
+        </div>
+        {qb?.verbonden&&qb?.bijgewerkt_op&&<div style={{fontSize:11,color:"#484F58",marginTop:2}}>Laatst bijgewerkt: {new Date(qb.bijgewerkt_op).toLocaleString("nl-NL")}</div>}
+      </div>
+      {!loading&&(qb?.verbonden
+        ?<button onClick={disconnectQB} style={{...S.btnGhost,color:"#f01e2c",borderColor:"#f01e2c"}}>Loskoppelen</button>
+        :<button onClick={connectQB} style={S.btn}>Koppel QuickBooks</button>
+      )}
+    </div>
+
+    <div style={{...S.card,background:"#0D1117"}}>
+      <div style={{fontSize:12,color:"#8B949E",lineHeight:1.6}}>
+        Na koppeling wordt elke nieuwe zending automatisch als factuur aangemaakt in QuickBooks Online met: zendingcode, klantnaam, adres, te betalen bedrag en aantal pakketten.
+      </div>
+    </div>
+  </div>
+}
+
 function Gebruikers(){
   const [lijst,setLijst]=React.useState([]);
   const [showNew,setShowNew]=React.useState(false);
