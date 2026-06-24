@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<title>SOlogics — Klantenportaal</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Bebas+Neue&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7.23.5/babel.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#f5f5f5;font-family:'DM Sans',sans-serif;color:#111;min-height:100vh}
+input,select,textarea{font-family:'DM Sans',sans-serif}
+button{-webkit-tap-highlight-color:transparent;cursor:pointer}
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:#ccc;border-radius:2px}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+
+const SUPA_URL="https://bvnyzxusfiloaivvhlnn.supabase.co";
+const KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ2bnl6eHVzZmlsb2FpdnZobG5uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2NjAzMjcsImV4cCI6MjA5MzIzNjMyN30.uT4KjSUxK9rwINGRktVcUgu3vdwvuoQ3lEFfccfJTQY";
+
+async function db(path,o={}){
+  const sep=path.includes("?")?"&":"?";
+  const url=SUPA_URL+"/rest/v1"+path+sep+"apikey="+KEY;
+  const method=o.method||"GET";
+  const headers=new Headers();
+  headers.set("apikey",KEY);
+  headers.set("Authorization","Bearer "+KEY);
+  headers.set("Content-Type","application/json");
+  headers.set("Accept","application/json");
+  if(o.headers)Object.entries(o.headers).forEach(([k,v])=>headers.set(k,v));
+  const res=await fetch(url,{method,headers,body:o.body});
+  if(!res.ok&&res.status!==404)throw new Error(await res.text());
+  if(res.status===204)return null;
+  return res.json();
+}
+
+// ── STATUS BADGE ──────────────────────────────────────────────────────────────
+const STATUS_COLORS={
+  aangemaakt:{bg:"#1a2332",color:"#58a6ff"},
+  toegewezen:{bg:"#1a2332",color:"#58a6ff"},
+  geaccepteerd:{bg:"#1a2332",color:"#58a6ff"},
+  naar_ophaling:{bg:"#2d2000",color:"#e3b341"},
+  opgehaald:{bg:"#2d2000",color:"#e3b341"},
+  onderweg:{bg:"#2d2000",color:"#e3b341"},
+  aangekomen:{bg:"#2d2000",color:"#e3b341"},
+  afgeleverd:{bg:"#112d24",color:"#3fb950"},
+  voltooid:{bg:"#112d24",color:"#3fb950"},
+  mislukt:{bg:"#2a0408",color:"#f85149"},
+  retour:{bg:"#2a0408",color:"#f85149"},
+};
+const STATUS_NL={
+  aangemaakt:"Aangemaakt",toegewezen:"Toegewezen",geaccepteerd:"Geaccepteerd",
+  naar_ophaling:"Naar ophaling",opgehaald:"Opgehaald",onderweg:"Onderweg",
+  aangekomen:"Aangekomen",afgeleverd:"Afgeleverd",voltooid:"Voltooid",
+  mislukt:"Mislukt",retour:"Retour"
+};
+
+function Badge({status}){
+  const s=STATUS_COLORS[status]||{bg:"#21262D",color:"#8B949E"};
+  return <span style={{background:s.bg,color:s.color,padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:700}}>
+    {STATUS_NL[status]||status}
+  </span>;
+}
+
+// ── CUTOFF MELDING ────────────────────────────────────────────────────────────
+function CutoffMelding(){
+  const nu=new Date();
+  const uur=nu.getHours();
+  const minuten=nu.getMinutes();
+  if(uur<15)return null;
+  return <div style={{background:"#fff3cd",border:"2px solid #f0ad4e",borderRadius:4,padding:"14px 20px",marginBottom:20,display:"flex",alignItems:"center",gap:12}}>
+    <span style={{fontSize:24}}>⚠️</span>
+    <div>
+      <div style={{fontWeight:700,fontSize:15,color:"#856404"}}>ORDERS NA 15:00 WORDEN DE VOLGENDE WERKDAG BEHANDELD</div>
+      <div style={{fontSize:12,color:"#856404",marginTop:2}}>Het is nu {uur}:{String(minuten).padStart(2,"0")} — uw bestelling wordt morgen verwerkt.</div>
+    </div>
+  </div>;
+}
+
+// ── LOGIN ─────────────────────────────────────────────────────────────────────
+function Login({onLogin}){
+  const [bedrijf,setBedrijf]=React.useState("");
+  const [pincode,setPincode]=React.useState("");
+  const [loading,setLoading]=React.useState(false);
+  const [err,setErr]=React.useState("");
+
+  async function login(){
+    if(!bedrijf||!pincode){setErr("Vul alle velden in");return;}
+    setLoading(true);setErr("");
+    try{
+      const r=await db(`/klanten?bedrijfsnaam=ilike.${encodeURIComponent(bedrijf)}&pincode=eq.${pincode}&actief=eq.true&select=*`);
+      if(r&&r.length>0){
+        onLogin(r[0]);
+      } else {
+        setErr("Bedrijfsnaam of pincode onjuist");
+      }
+    }catch(e){setErr("Inloggen mislukt: "+e.message);}
+    setLoading(false);
+  }
+
+  return <div style={{minHeight:"100vh",background:"#f5f5f5",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:20}}>
+    <div style={{width:"100%",maxWidth:420}}>
+      {/* Logo */}
+      <div style={{textAlign:"center",marginBottom:32}}>
+        <div style={{fontFamily:"Impact,sans-serif",fontSize:40,lineHeight:1,display:"inline-flex"}}>
+          <span style={{background:"#1a1a1a",color:"#fff",padding:"6px 14px",border:"1px solid #333",letterSpacing:1}}>SO</span>
+          <span style={{background:"#8B1020",color:"#fff",padding:"6px 14px",border:"2px solid #6a0d18",letterSpacing:3}}>LOGICS</span>
+        </div>
+        <div style={{fontSize:11,color:"#888",letterSpacing:2,marginTop:6,textTransform:"lowercase"}}>simplify your logistics business</div>
+        <div style={{fontSize:14,color:"#555",marginTop:12,fontWeight:500}}>Klantenportaal</div>
+      </div>
+
+      <div style={{background:"#fff",borderRadius:8,padding:28,boxShadow:"0 2px 16px rgba(0,0,0,.08)"}}>
+        <div style={{fontSize:18,fontWeight:700,marginBottom:20,color:"#111"}}>Inloggen</div>
+
+        <div style={{marginBottom:14}}>
+          <label style={{fontSize:12,fontWeight:600,color:"#555",textTransform:"uppercase",letterSpacing:"0.06em",display:"block",marginBottom:6}}>Bedrijfsnaam</label>
+          <input style={{width:"100%",border:"1px solid #ddd",borderRadius:4,padding:"11px 14px",fontSize:14,outline:"none",background:"#fafafa"}}
+            value={bedrijf} onChange={e=>setBedrijf(e.target.value)}
+            onKeyDown={e=>e.key==="Enter"&&login()}
+            placeholder="Uw bedrijfsnaam"/>
+        </div>
+
+        <div style={{marginBottom:20}}>
+          <label style={{fontSize:12,fontWeight:600,color:"#555",textTransform:"uppercase",letterSpacing:"0.06em",display:"block",marginBottom:6}}>Pincode</label>
+          <input style={{width:"100%",border:"1px solid #ddd",borderRadius:4,padding:"11px 14px",fontSize:14,outline:"none",background:"#fafafa"}}
+            type="password" value={pincode} onChange={e=>setPincode(e.target.value)}
+            onKeyDown={e=>e.key==="Enter"&&login()}
+            placeholder="••••"/>
+        </div>
+
+        {err&&<div style={{background:"#fff3f3",border:"1px solid #f5c6c6",borderRadius:4,padding:"10px 14px",color:"#c0392b",fontSize:13,marginBottom:16}}>{err}</div>}
+
+        <button onClick={login} disabled={loading} style={{width:"100%",background:"#8B1020",color:"#fff",border:"none",borderRadius:4,padding:"14px",fontSize:15,fontWeight:700,opacity:loading?0.7:1}}>
+          {loading?"Inloggen...":"Inloggen →"}
+        </button>
+
+        <div style={{marginTop:16,textAlign:"center",fontSize:12,color:"#888"}}>
+          Geen toegang? Neem contact op via <a href="https://wa.me/5977140097" style={{color:"#8B1020"}}>WhatsApp</a>
+        </div>
+      </div>
+    </div>
+  </div>;
+}
+
+// ── PORTAAL ───────────────────────────────────────────────────────────────────
+function Portaal({klant,onLogout}){
+  const [tab,setTab]=React.useState("zendingen");
+  const [zendingen,setZendingen]=React.useState([]);
+  const [loading,setLoading]=React.useState(true);
+  const [detail,setDetail]=React.useState(null);
+
+  React.useEffect(()=>{load();},[]);
+
+  async function load(){
+    setLoading(true);
+    try{
+      const r=await db(`/zendingen?klant_id=eq.${klant.id}&order=aangemaakt_op.desc&select=*`);
+      setZendingen(r||[]);
+    }catch(e){}
+    setLoading(false);
+  }
+
+  const openstaand=zendingen.filter(z=>!["afgeleverd","voltooid","mislukt","retour"].includes(z.status));
+  const afgeleverd=zendingen.filter(z=>["afgeleverd","voltooid"].includes(z.status));
+  const totaal_srd=zendingen.reduce((a,z)=>a+parseFloat(z.prijs_srd||0),0);
+  const onbetaald=zendingen.filter(z=>z.betaler==="ontvanger"&&!["mislukt","retour"].includes(z.status)).reduce((a,z)=>a+parseFloat(z.prijs_srd||0),0);
+
+  const fmt=d=>d?new Date(d).toLocaleDateString("nl-NL",{day:"2-digit",month:"short",year:"numeric"}):"—";
+
+  async function downloadInvoice(z){
+    const res=await fetch(SUPA_URL+"/functions/v1/genereer-invoice",{
+      method:"POST",
+      headers:{apikey:KEY,Authorization:"Bearer "+KEY,"Content-Type":"application/json"},
+      body:JSON.stringify(z)
+    });
+    const html=await res.text();
+    const win=window.open("","_blank");
+    win.document.write(html);
+    win.document.close();
+    setTimeout(()=>win.print(),500);
+  }
+
+  return <div style={{minHeight:"100vh",background:"#f5f5f5"}}>
+    {/* TOPBAR */}
+    <div style={{background:"#fff",borderBottom:"2px solid #8B1020",padding:"0 20px",display:"flex",alignItems:"center",justifyContent:"space-between",height:56,position:"sticky",top:0,zIndex:100}}>
+      <div style={{fontFamily:"Impact,sans-serif",fontSize:24,lineHeight:1,display:"flex"}}>
+        <span style={{background:"#1a1a1a",color:"#fff",padding:"3px 8px",letterSpacing:1}}>SO</span>
+        <span style={{background:"#8B1020",color:"#fff",padding:"3px 8px",letterSpacing:2}}>LOGICS</span>
+      </div>
+      <div style={{display:"flex",alignItems:"center",gap:12}}>
+        <div style={{fontSize:13,color:"#555",display:"flex",flexDirection:"column",alignItems:"flex-end"}}>
+          <span style={{fontWeight:600,color:"#111"}}>{klant.bedrijfsnaam}</span>
+          <span style={{fontSize:11,color:"#888"}}>{klant.contactpersoon}</span>
+        </div>
+        <button onClick={onLogout} style={{background:"#f5f5f5",border:"1px solid #ddd",borderRadius:4,padding:"6px 12px",fontSize:12,color:"#555"}}>Uitloggen</button>
+      </div>
+    </div>
+
+    <div style={{maxWidth:900,margin:"0 auto",padding:20}}>
+      <CutoffMelding/>
+
+      {/* KPI CARDS */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:20}}>
+        {[
+          {l:"Totaal zendingen",v:zendingen.length,c:"#111"},
+          {l:"Lopend",v:openstaand.length,c:"#e3b341"},
+          {l:"Afgeleverd",v:afgeleverd.length,c:"#2a7a2a"},
+        ].map(s=><div key={s.l} style={{background:"#fff",borderRadius:6,padding:"14px 16px",boxShadow:"0 1px 4px rgba(0,0,0,.06)",borderTop:"3px solid #8B1020"}}>
+          <div style={{fontSize:11,color:"#888",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em"}}>{s.l}</div>
+          <div style={{fontSize:32,fontWeight:700,color:s.c,fontFamily:"'Bebas Neue',sans-serif",marginTop:2}}>{s.v}</div>
+        </div>)}
+      </div>
+
+      {/* TABS */}
+      <div style={{display:"flex",gap:4,marginBottom:16,background:"#fff",padding:4,borderRadius:6,boxShadow:"0 1px 4px rgba(0,0,0,.06)"}}>
+        {[{id:"zendingen",l:"Zendingen"},{id:"facturen",l:"Facturen"},{id:"betaalstatus",l:"Betaalstatus"}].map(t=>
+          <button key={t.id} onClick={()=>setTab(t.id)} style={{flex:1,padding:"9px",borderRadius:4,border:"none",fontSize:13,fontWeight:600,background:tab===t.id?"#8B1020":"transparent",color:tab===t.id?"#fff":"#555"}}>
+            {t.l}
+          </button>
+        )}
+      </div>
+
+      {loading&&<div style={{textAlign:"center",padding:40,color:"#888"}}>Laden...</div>}
+
+      {/* ZENDINGEN TAB */}
+      {!loading&&tab==="zendingen"&&<div style={{background:"#fff",borderRadius:6,boxShadow:"0 1px 4px rgba(0,0,0,.06)",overflow:"hidden"}}>
+        {zendingen.length===0
+          ?<div style={{padding:40,textAlign:"center",color:"#888"}}>Geen zendingen gevonden</div>
+          :<div style={{overflowX:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+              <thead style={{background:"#f9f9f9"}}>
+                <tr>
+                  {["Zending #","Ontvanger","Adres","Datum","Prijs","Status",""].map(h=>
+                    <th key={h} style={{padding:"10px 14px",textAlign:"left",fontSize:11,fontWeight:700,color:"#888",textTransform:"uppercase",letterSpacing:"0.06em",borderBottom:"1px solid #eee"}}>{h}</th>
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {zendingen.map(z=><tr key={z.id} style={{borderBottom:"1px solid #eee"}}>
+                  <td style={{padding:"12px 14px",fontWeight:600,color:"#8B1020"}}>{z.zending_code}</td>
+                  <td style={{padding:"12px 14px",color:"#111"}}>{z.ontvanger_naam||"—"}</td>
+                  <td style={{padding:"12px 14px",color:"#555",maxWidth:150,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{z.afleveradres||"—"}</td>
+                  <td style={{padding:"12px 14px",color:"#555",whiteSpace:"nowrap"}}>{fmt(z.aangemaakt_op)}</td>
+                  <td style={{padding:"12px 14px",fontWeight:600}}>{z.prijs_srd?`SRD ${z.prijs_srd}`:"—"}</td>
+                  <td style={{padding:"12px 14px"}}><Badge status={z.status}/></td>
+                  <td style={{padding:"12px 14px"}}>
+                    <button onClick={()=>setDetail(z)} style={{background:"#f5f5f5",border:"1px solid #ddd",borderRadius:4,padding:"4px 10px",fontSize:11,color:"#555"}}>Detail</button>
+                  </td>
+                </tr>)}
+              </tbody>
+            </table>
+          </div>
+        }
+      </div>}
+
+      {/* FACTUREN TAB */}
+      {!loading&&tab==="facturen"&&<div style={{background:"#fff",borderRadius:6,boxShadow:"0 1px 4px rgba(0,0,0,.06)",overflow:"hidden"}}>
+        {zendingen.length===0
+          ?<div style={{padding:40,textAlign:"center",color:"#888"}}>Geen facturen gevonden</div>
+          :<div style={{overflowX:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+              <thead style={{background:"#f9f9f9"}}>
+                <tr>
+                  {["Zending #","Ontvanger","Datum","Bedrag","Betaler","Download"].map(h=>
+                    <th key={h} style={{padding:"10px 14px",textAlign:"left",fontSize:11,fontWeight:700,color:"#888",textTransform:"uppercase",letterSpacing:"0.06em",borderBottom:"1px solid #eee"}}>{h}</th>
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {zendingen.filter(z=>z.prijs_srd>0).map(z=><tr key={z.id} style={{borderBottom:"1px solid #eee"}}>
+                  <td style={{padding:"12px 14px",fontWeight:600,color:"#8B1020"}}>{z.zending_code}</td>
+                  <td style={{padding:"12px 14px"}}>{z.ontvanger_naam||"—"}</td>
+                  <td style={{padding:"12px 14px",color:"#555",whiteSpace:"nowrap"}}>{fmt(z.aangemaakt_op)}</td>
+                  <td style={{padding:"12px 14px",fontWeight:700,color:"#8B1020"}}>SRD {z.prijs_srd}</td>
+                  <td style={{padding:"12px 14px",color:"#555",textTransform:"capitalize"}}>{z.betaler||"afzender"}</td>
+                  <td style={{padding:"12px 14px"}}>
+                    <button onClick={()=>downloadInvoice(z)} style={{background:"#8B1020",color:"#fff",border:"none",borderRadius:4,padding:"5px 12px",fontSize:11,fontWeight:600}}>📄 PDF</button>
+                  </td>
+                </tr>)}
+              </tbody>
+            </table>
+          </div>
+        }
+      </div>}
+
+      {/* BETAALSTATUS TAB */}
+      {!loading&&tab==="betaalstatus"&&<div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
+          <div style={{background:"#fff",borderRadius:6,padding:"16px 20px",boxShadow:"0 1px 4px rgba(0,0,0,.06)",borderLeft:"4px solid #8B1020"}}>
+            <div style={{fontSize:11,color:"#888",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em"}}>Totaal gefactureerd</div>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:32,color:"#111",marginTop:4}}>SRD {totaal_srd.toFixed(2)}</div>
+          </div>
+          <div style={{background:"#fff",borderRadius:6,padding:"16px 20px",boxShadow:"0 1px 4px rgba(0,0,0,.06)",borderLeft:"4px solid #e3b341"}}>
+            <div style={{fontSize:11,color:"#888",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em"}}>Ontvanger betaalt (open)</div>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:32,color:onbetaald>0?"#856404":"#2a7a2a",marginTop:4}}>SRD {onbetaald.toFixed(2)}</div>
+          </div>
+        </div>
+
+        <div style={{background:"#fff",borderRadius:6,boxShadow:"0 1px 4px rgba(0,0,0,.06)",overflow:"hidden"}}>
+          <div style={{padding:"12px 16px",borderBottom:"1px solid #eee",fontSize:13,fontWeight:600,color:"#111"}}>Betaaloverzicht per zending</div>
+          <div style={{overflowX:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+              <thead style={{background:"#f9f9f9"}}>
+                <tr>
+                  {["Zending #","Ontvanger","Bedrag","Betaler","Methode","Status"].map(h=>
+                    <th key={h} style={{padding:"10px 14px",textAlign:"left",fontSize:11,fontWeight:700,color:"#888",textTransform:"uppercase",letterSpacing:"0.06em",borderBottom:"1px solid #eee"}}>{h}</th>
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {zendingen.map(z=><tr key={z.id} style={{borderBottom:"1px solid #eee"}}>
+                  <td style={{padding:"12px 14px",fontWeight:600,color:"#8B1020"}}>{z.zending_code}</td>
+                  <td style={{padding:"12px 14px"}}>{z.ontvanger_naam||"—"}</td>
+                  <td style={{padding:"12px 14px",fontWeight:600}}>{z.prijs_srd?`SRD ${z.prijs_srd}`:"—"}</td>
+                  <td style={{padding:"12px 14px",textTransform:"capitalize",color:"#555"}}>{z.betaler||"afzender"}</td>
+                  <td style={{padding:"12px 14px",textTransform:"capitalize",color:"#555"}}>{z.betaalmethode||"—"}</td>
+                  <td style={{padding:"12px 14px"}}><Badge status={z.status}/></td>
+                </tr>)}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>}
+    </div>
+
+    {/* DETAIL MODAL */}
+    {detail&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+      <div style={{background:"#fff",borderRadius:8,width:"100%",maxWidth:480,maxHeight:"80vh",overflow:"auto"}}>
+        <div style={{padding:"14px 20px",borderBottom:"1px solid #eee",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,background:"#fff"}}>
+          <div style={{fontWeight:700,fontSize:16}}>{detail.zending_code}</div>
+          <button onClick={()=>setDetail(null)} style={{background:"#f5f5f5",border:"none",borderRadius:4,width:30,height:30,fontSize:18,color:"#555"}}>✕</button>
+        </div>
+        <div style={{padding:20}}>
+          <Badge status={detail.status}/>
+          <div style={{marginTop:16,display:"flex",flexDirection:"column",gap:10}}>
+            {[
+              ["Ontvanger",detail.ontvanger_naam],
+              ["Telefoon",detail.ontvanger_tel],
+              ["Afleveradres",detail.afleveradres],
+              ["District",detail.district],
+              ["Afstand",detail.afstand_km?detail.afstand_km+" km":"—"],
+              ["Prijs",detail.prijs_srd?"SRD "+detail.prijs_srd:"—"],
+              ["Betaler",detail.betaler||"afzender"],
+              ["Betaalmethode",detail.betaalmethode||"—"],
+              ["COD bedrag",detail.cod_bedrag>0?"SRD "+detail.cod_bedrag:"—"],
+              ["Aangemaakt",fmt(detail.aangemaakt_op)],
+            ].map(([l,v])=><div key={l} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #f5f5f5",fontSize:13}}>
+              <span style={{color:"#888",fontWeight:500}}>{l}</span>
+              <span style={{color:"#111",fontWeight:600,textAlign:"right",maxWidth:"60%"}}>{v||"—"}</span>
+            </div>)}
+          </div>
+          <div style={{display:"flex",gap:8,marginTop:16}}>
+            <a href={`https://sologics.site/tracking.html?code=${detail.zending_code}`} target="_blank" style={{flex:1,background:"#f5f5f5",border:"1px solid #ddd",borderRadius:4,padding:"10px",textAlign:"center",fontSize:13,color:"#555",textDecoration:"none",fontWeight:600}}>
+              📍 Volgen
+            </a>
+            <button onClick={()=>downloadInvoice(detail)} style={{flex:1,background:"#8B1020",color:"#fff",border:"none",borderRadius:4,padding:"10px",fontSize:13,fontWeight:600}}>
+              📄 Invoice
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>}
+  </div>;
+}
+
+// ── APP ───────────────────────────────────────────────────────────────────────
+function App(){
+  const [klant,setKlant]=React.useState(null);
+
+  // Check URL voor zending code (tracking redirect)
+  React.useEffect(()=>{
+    const stored=sessionStorage.getItem("sl_klant");
+    if(stored)setKlant(JSON.parse(stored));
+  },[]);
+
+  function handleLogin(k){
+    setKlant(k);
+    sessionStorage.setItem("sl_klant",JSON.stringify(k));
+  }
+
+  function handleLogout(){
+    setKlant(null);
+    sessionStorage.removeItem("sl_klant");
+  }
+
+  if(!klant)return <Login onLogin={handleLogin}/>;
+  return <Portaal klant={klant} onLogout={handleLogout}/>;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
