@@ -649,6 +649,42 @@ function Zendingen({zendingen,chauffeurs,klanten,onRefresh}){
           </button>)}
         </div>
       </div>
+      {/* Betaling sectie */}
+      <div style={{marginTop:14,padding:14,background:"#0D1117",borderRadius:2}}>
+        <div style={{fontSize:11,color:"#8B949E",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Betaling</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:12}}>
+          <div style={{background:"#161B22",borderRadius:2,padding:"8px 10px"}}>
+            <div style={{fontSize:10,color:"#8B949E",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>Totaal</div>
+            <div style={{fontSize:15,fontWeight:700,color:"#E6EDF3"}}>SRD {(parseFloat(detail.prijs_srd||0)+parseFloat(detail.cod_bedrag||0)).toFixed(2)}</div>
+          </div>
+          <div style={{background:"#161B22",borderRadius:2,padding:"8px 10px"}}>
+            <div style={{fontSize:10,color:"#8B949E",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>Betaald</div>
+            <div style={{fontSize:15,fontWeight:700,color:"#3FB950"}}>SRD {parseFloat(detail.betaald_bedrag||0).toFixed(2)}</div>
+          </div>
+          <div style={{background:"#161B22",borderRadius:2,padding:"8px 10px"}}>
+            <div style={{fontSize:10,color:"#8B949E",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>Open</div>
+            <div style={{fontSize:15,fontWeight:700,color:(parseFloat(detail.prijs_srd||0)+parseFloat(detail.cod_bedrag||0)-parseFloat(detail.betaald_bedrag||0))>0?"#D29922":"#3FB950"}}>
+              SRD {Math.max(0,(parseFloat(detail.prijs_srd||0)+parseFloat(detail.cod_bedrag||0)-parseFloat(detail.betaald_bedrag||0))).toFixed(2)}
+            </div>
+          </div>
+        </div>
+        {!detail.volledig_betaald&&<div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          {["cash","pos","giraal"].map(m=><button key={m} onClick={async()=>{
+            const totaal=parseFloat(detail.prijs_srd||0)+parseFloat(detail.cod_bedrag||0);
+            const volledig=true;
+            await db(`/zendingen?id=eq.${detail.id}`,{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({
+              betaald_bedrag:totaal,betaald_op:new Date().toISOString(),betaald_door:"admin",volledig_betaald:volledig,betaalmethode:m
+            })});
+            onRefresh();setDetail(d=>({...d,betaald_bedrag:totaal,volledig_betaald:true,betaalmethode:m}));
+          }} style={{...S.btn,background:m==="cash"?"#2D1D00":m==="pos"?"#1A3A5C":"#112D24",color:m==="cash"?"#D29922":m==="pos"?"#58A6FF":"#3FB950",border:`1px solid ${m==="cash"?"#D29922":m==="pos"?"#58A6FF":"#3FB950"}`,fontSize:11,padding:"6px 12px"}}>
+            ✓ Betaald via {m.toUpperCase()}
+          </button>)}
+        </div>}
+        {detail.volledig_betaald&&<div style={{background:"#112D24",border:"1px solid #3FB950",borderRadius:2,padding:"8px 12px",fontSize:12,color:"#3FB950",fontWeight:600}}>
+          ✓ Volledig betaald via {detail.betaalmethode?.toUpperCase()} op {detail.betaald_op?new Date(detail.betaald_op).toLocaleString("nl-NL"):"—"}
+        </div>}
+      </div>
+
       <div style={{display:"flex",justifyContent:"space-between",marginTop:14}}>
         <button style={{...S.btnGhost,color:"#f01e2c",borderColor:"#f01e2c"}} onClick={()=>del(detail.id)}>Verwijderen</button>
         <button style={S.btn} onClick={()=>downloadInvoice(detail)}>📄 Download Invoice</button>
