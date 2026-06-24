@@ -273,6 +273,8 @@ function Zendingen({zendingen,chauffeurs,klanten,onRefresh}){
   const [saving,setSaving]=React.useState(false);
   const [err,setErr]=React.useState("");
   const [showBulk,setShowBulk]=React.useState(false);
+  const [showEdit,setShowEdit]=React.useState(false);
+  const [editForm,setEditForm]=React.useState({});
   const [bulkData,setBulkData]=React.useState([]);
   const [bulkLoading,setBulkLoading]=React.useState(false);
   const [bulkDone,setBulkDone]=React.useState(0);
@@ -569,7 +571,19 @@ function Zendingen({zendingen,chauffeurs,klanten,onRefresh}){
 
     {showNew&&<Modal title="Nieuwe zending" onClose={()=>setShowNew(false)}>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-        <Fld l="Klant (optioneel)" ch={<select style={S.sel} value={form.klant_id} onChange={e=>setForm(f=>({...f,klant_id:e.target.value}))}><option value="">Selecteer...</option>{klanten.map(k=><option key={k.id} value={k.id}>{k.bedrijfsnaam}</option>)}</select>}/>
+        <Fld l="Klant (optioneel)" ch={<select style={S.sel} value={form.klant_id} onChange={e=>{
+  const kid=e.target.value;
+  const k=klanten.find(k=>k.id===kid);
+  setForm(f=>({...f,
+    klant_id:kid,
+    ontvanger_naam:k?k.contactpersoon||k.bedrijfsnaam:f.ontvanger_naam,
+    ontvanger_tel:k?k.telefoon||f.ontvanger_tel:f.ontvanger_tel,
+    ontvanger_email:k?k.email||f.ontvanger_email:f.ontvanger_email,
+    afleveradres:k?k.adres||f.afleveradres:f.afleveradres,
+    district:k?k.stad||f.district:f.district,
+  }));
+  if(k&&k.adres)updateAfleveradres(k.adres);
+}}><option value="">Selecteer...</option>{klanten.map(k=><option key={k.id} value={k.id}>{k.bedrijfsnaam}</option>)}</select>}/>
         <Fld l="Diensttype" ch={<select style={S.sel} value={form.diensttype} onChange={e=>setForm(f=>({...f,diensttype:e.target.value}))}>{DIENST.map(d=><option key={d} value={d}>{d.replace("_"," ")}</option>)}</select>}/>
       </div>
       <Fld l="Naam ontvanger" ch={<input style={S.inp} value={form.ontvanger_naam} onChange={e=>setForm(f=>({...f,ontvanger_naam:e.target.value}))} placeholder="Volledige naam"/>}/>
@@ -730,9 +744,62 @@ function Zendingen({zendingen,chauffeurs,klanten,onRefresh}){
         </div>
       </div>
 
-      <div style={{display:"flex",justifyContent:"space-between",marginTop:14}}>
+      <div style={{display:"flex",justifyContent:"space-between",marginTop:14,flexWrap:"wrap",gap:8}}>
         <button style={{...S.btnGhost,color:"#f01e2c",borderColor:"#f01e2c"}} onClick={()=>del(detail.id)}>Verwijderen</button>
-        <button style={S.btn} onClick={()=>downloadInvoice(detail)}>📄 Download Invoice</button>
+        <div style={{display:"flex",gap:8}}>
+          <button style={{...S.btnGhost,color:"#58A6FF",borderColor:"#58A6FF"}} onClick={()=>{
+            setEditForm({
+              ontvanger_naam:detail.ontvanger_naam||"",
+              ontvanger_tel:detail.ontvanger_tel||"",
+              ontvanger_email:detail.ontvanger_email||"",
+              afleveradres:detail.afleveradres||"",
+              district:detail.district||"Paramaribo",
+              pakkettype:detail.pakkettype||"",
+              gewicht_kg:detail.gewicht_kg||"",
+              diensttype:detail.diensttype||"standaard",
+              cod_bedrag:detail.cod_bedrag||"",
+              betaler:detail.betaler||"afzender",
+              betaalmethode:detail.betaalmethode||"pos",
+              notities:detail.notities||"",
+            });
+            setShowEdit(true);
+          }}>✏️ Bewerken</button>
+          <button style={S.btn} onClick={()=>downloadInvoice(detail)}>📄 Invoice</button>
+        </div>
+      </div>
+    </Modal>}
+
+    {showEdit&&detail&&<Modal title={`Bewerk — ${detail.zending_code}`} onClose={()=>setShowEdit(false)}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <Fld l="Naam ontvanger" ch={<input style={S.inp} value={editForm.ontvanger_naam} onChange={e=>setEditForm(f=>({...f,ontvanger_naam:e.target.value}))}/>}/>
+        <Fld l="Telefoon" ch={<input style={S.inp} value={editForm.ontvanger_tel} onChange={e=>setEditForm(f=>({...f,ontvanger_tel:e.target.value}))}/>}/>
+        <Fld l="Email" ch={<input style={S.inp} type="email" value={editForm.ontvanger_email} onChange={e=>setEditForm(f=>({...f,ontvanger_email:e.target.value}))}/>}/>
+        <Fld l="District" ch={<select style={S.sel} value={editForm.district} onChange={e=>setEditForm(f=>({...f,district:e.target.value}))}>{DISTRICTS.map(d=><option key={d} value={d}>{d}</option>)}</select>}/>
+      </div>
+      <Fld l="Afleveradres" ch={<input style={S.inp} value={editForm.afleveradres} onChange={e=>setEditForm(f=>({...f,afleveradres:e.target.value}))}/>}/>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+        <Fld l="Pakkettype" ch={<input style={S.inp} value={editForm.pakkettype} onChange={e=>setEditForm(f=>({...f,pakkettype:e.target.value}))} placeholder="Doos, tas..."/>}/>
+        <Fld l="Gewicht (kg)" ch={<input style={S.inp} type="number" value={editForm.gewicht_kg} onChange={e=>setEditForm(f=>({...f,gewicht_kg:e.target.value}))}/>}/>
+        <Fld l="COD bedrag (SRD)" ch={<input style={S.inp} type="number" value={editForm.cod_bedrag} onChange={e=>setEditForm(f=>({...f,cod_bedrag:e.target.value}))} placeholder="0"/>}/>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+        <Fld l="Diensttype" ch={<select style={S.sel} value={editForm.diensttype} onChange={e=>setEditForm(f=>({...f,diensttype:e.target.value}))}>{DIENST.map(d=><option key={d} value={d}>{d.replace("_"," ")}</option>)}</select>}/>
+        <Fld l="Betaler" ch={<select style={S.sel} value={editForm.betaler} onChange={e=>setEditForm(f=>({...f,betaler:e.target.value}))}><option value="afzender">Afzender</option><option value="ontvanger">Ontvanger</option></select>}/>
+        <Fld l="Betaalmethode" ch={<select style={S.sel} value={editForm.betaalmethode} onChange={e=>setEditForm(f=>({...f,betaalmethode:e.target.value}))}><option value="pos">POS</option><option value="giraal">Giraal</option><option value="cash">Cash</option></select>}/>
+      </div>
+      <Fld l="Notities" ch={<textarea style={{...S.inp,height:60,resize:"vertical"}} value={editForm.notities} onChange={e=>setEditForm(f=>({...f,notities:e.target.value}))}/>}/>
+      <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:8}}>
+        <button style={S.btnGhost} onClick={()=>setShowEdit(false)}>Annuleren</button>
+        <button style={S.btn} onClick={async()=>{
+          await db(`/zendingen?id=eq.${detail.id}`,{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({
+            ...editForm,
+            gewicht_kg:editForm.gewicht_kg||null,
+            cod_bedrag:parseFloat(editForm.cod_bedrag)||0,
+          })});
+          setShowEdit(false);
+          setDetail(d=>({...d,...editForm}));
+          onRefresh();
+        }}>Opslaan</button>
       </div>
     </Modal>}
 
