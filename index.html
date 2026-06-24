@@ -827,7 +827,7 @@ function Klanten({klanten,zendingen,onRefresh}){
     setEditKlant(k);
   }
 
-  const KlantForm=({onSave,onCancel,saveLabel})=><div>
+  const klantFormVelden = (onSave, onCancel, saveLabel) => <div>
     <Fld l="Bedrijfsnaam *" ch={<input style={S.inp} value={form.bedrijfsnaam} onChange={e=>setForm(f=>({...f,bedrijfsnaam:e.target.value}))}/>}/>
     <Fld l="Contactpersoon" ch={<input style={S.inp} value={form.contactpersoon} onChange={e=>setForm(f=>({...f,contactpersoon:e.target.value}))}/>}/>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
@@ -895,11 +895,11 @@ function Klanten({klanten,zendingen,onRefresh}){
     </div>
 
     {showNew&&<Modal title="Nieuwe klant" onClose={()=>setShowNew(false)}>
-      <KlantForm onSave={save} onCancel={()=>setShowNew(false)} saveLabel="Aanmaken"/>
+      {klantFormVelden(save, ()=>setShowNew(false), "Aanmaken")}
     </Modal>}
 
     {editKlant&&<Modal title={`Bewerk — ${editKlant.bedrijfsnaam}`} onClose={()=>setEditKlant(null)}>
-      <KlantForm onSave={update} onCancel={()=>setEditKlant(null)} saveLabel="Opslaan"/>
+      {klantFormVelden(update, ()=>setEditKlant(null), "Opslaan")}
     </Modal>}
   </div>
 }
