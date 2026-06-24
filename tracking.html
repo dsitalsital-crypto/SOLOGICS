@@ -245,6 +245,31 @@ function App(){
             <div style={{fontSize:13,color:"#E6EDF3",fontWeight:500}}>{v}</div>
           </div>)}
         </div>
+
+        {/* Betaalstatus */}
+        {(zending.prijs_srd>0||zending.cod_bedrag>0)&&<div style={{background:"#161B22",border:"1px solid #21262D",borderRadius:4,padding:14,marginTop:12}}>
+          <div style={{fontSize:11,color:"#8B949E",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Betaalstatus</div>
+          {zending.prijs_srd>0&&<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:zending.cod_bedrag>0?"1px solid #21262D":"none"}}>
+            <div>
+              <div style={{fontSize:12,fontWeight:600}}>Leveringskosten</div>
+              <div style={{fontSize:11,color:"#8B949E"}}>SRD {parseFloat(zending.prijs_srd).toFixed(2)}</div>
+            </div>
+            <span style={{background:zending.levering_betaald?"#112D24":"#2D1D00",color:zending.levering_betaald?"#3FB950":"#D29922",padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:700}}>
+              {zending.levering_betaald?"✓ Betaald":"Openstaand"}
+            </span>
+          </div>}
+          {zending.cod_bedrag>0&&<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0"}}>
+            <div>
+              <div style={{fontSize:12,fontWeight:600}}>COD Rembours</div>
+              <div style={{fontSize:11,color:"#8B949E"}}>SRD {parseFloat(zending.cod_bedrag).toFixed(2)}</div>
+            </div>
+            <span style={{background:zending.cod_betaald?"#112D24":"#2D1D00",color:zending.cod_betaald?"#3FB950":"#D29922",padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:700}}>
+              {zending.cod_betaald?"✓ Ontvangen":"Openstaand"}
+            </span>
+          </div>}
+        </div>}
+
+        div>
       </div>
 
       {/* CHAUFFEUR INFO */}
