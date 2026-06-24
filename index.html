@@ -651,38 +651,83 @@ function Zendingen({zendingen,chauffeurs,klanten,onRefresh}){
       </div>
       {/* Betaling sectie */}
       <div style={{marginTop:14,padding:14,background:"#0D1117",borderRadius:2}}>
-        <div style={{fontSize:11,color:"#8B949E",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Betaling</div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:12}}>
-          <div style={{background:"#161B22",borderRadius:2,padding:"8px 10px"}}>
-            <div style={{fontSize:10,color:"#8B949E",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>Totaal</div>
-            <div style={{fontSize:15,fontWeight:700,color:"#E6EDF3"}}>SRD {(parseFloat(detail.prijs_srd||0)+parseFloat(detail.cod_bedrag||0)).toFixed(2)}</div>
-          </div>
-          <div style={{background:"#161B22",borderRadius:2,padding:"8px 10px"}}>
-            <div style={{fontSize:10,color:"#8B949E",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>Betaald</div>
-            <div style={{fontSize:15,fontWeight:700,color:"#3FB950"}}>SRD {parseFloat(detail.betaald_bedrag||0).toFixed(2)}</div>
-          </div>
-          <div style={{background:"#161B22",borderRadius:2,padding:"8px 10px"}}>
-            <div style={{fontSize:10,color:"#8B949E",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>Open</div>
-            <div style={{fontSize:15,fontWeight:700,color:(parseFloat(detail.prijs_srd||0)+parseFloat(detail.cod_bedrag||0)-parseFloat(detail.betaald_bedrag||0))>0?"#D29922":"#3FB950"}}>
-              SRD {Math.max(0,(parseFloat(detail.prijs_srd||0)+parseFloat(detail.cod_bedrag||0)-parseFloat(detail.betaald_bedrag||0))).toFixed(2)}
+        <div style={{fontSize:11,color:"#8B949E",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:12}}>Betalingen</div>
+
+        {/* Leveringskosten */}
+        <div style={{background:"#161B22",borderRadius:2,padding:12,marginBottom:10}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+            <div>
+              <div style={{fontSize:12,fontWeight:700,color:"#E6EDF3"}}>Leveringskosten</div>
+              <div style={{fontSize:11,color:"#8B949E",marginTop:2}}>Betaalt: ontvanger</div>
+            </div>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:20,color:detail.levering_betaald?"#3FB950":"#D29922"}}>
+              SRD {parseFloat(detail.prijs_srd||0).toFixed(2)}
             </div>
           </div>
+          {detail.levering_betaald
+            ?<div style={{background:"#112D24",border:"1px solid #3FB950",borderRadius:2,padding:"6px 10px",fontSize:11,color:"#3FB950",fontWeight:600}}>
+              ✓ Betaald via {detail.levering_betaald_methode?.toUpperCase()} op {detail.levering_betaald_op?new Date(detail.levering_betaald_op).toLocaleString("nl-NL"):"—"}
+            </div>
+            :<div>
+              <div style={{fontSize:11,color:"#8B949E",marginBottom:6}}>Markeer als betaald via:</div>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                {["cash","pos","giraal"].map(m=><button key={m} onClick={async()=>{
+                  const now=new Date().toISOString();
+                  const volledig=!detail.cod_bedrag||detail.cod_betaald;
+                  await db(`/zendingen?id=eq.${detail.id}`,{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({
+                    levering_betaald:true,levering_betaald_op:now,levering_betaald_methode:m,
+                    volledig_betaald:volledig,betaald_bedrag:volledig?(parseFloat(detail.prijs_srd||0)+parseFloat(detail.cod_bedrag||0)):parseFloat(detail.prijs_srd||0),betaald_op:now
+                  })});
+                  onRefresh();setDetail(d=>({...d,levering_betaald:true,levering_betaald_methode:m,levering_betaald_op:now,volledig_betaald:volledig}));
+                }} style={{background:m==="cash"?"#2D1D00":m==="pos"?"#1A3A5C":"#112D24",color:m==="cash"?"#D29922":m==="pos"?"#58A6FF":"#3FB950",border:`1px solid ${m==="cash"?"#D29922":m==="pos"?"#58A6FF":"#3FB950"}`,borderRadius:2,padding:"5px 10px",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>
+                  ✓ {m.toUpperCase()}
+                </button>)}
+              </div>
+            </div>
+          }
         </div>
-        {!detail.volledig_betaald&&<div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-          {["cash","pos","giraal"].map(m=><button key={m} onClick={async()=>{
-            const totaal=parseFloat(detail.prijs_srd||0)+parseFloat(detail.cod_bedrag||0);
-            const volledig=true;
-            await db(`/zendingen?id=eq.${detail.id}`,{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({
-              betaald_bedrag:totaal,betaald_op:new Date().toISOString(),betaald_door:"admin",volledig_betaald:volledig,betaalmethode:m
-            })});
-            onRefresh();setDetail(d=>({...d,betaald_bedrag:totaal,volledig_betaald:true,betaalmethode:m}));
-          }} style={{...S.btn,background:m==="cash"?"#2D1D00":m==="pos"?"#1A3A5C":"#112D24",color:m==="cash"?"#D29922":m==="pos"?"#58A6FF":"#3FB950",border:`1px solid ${m==="cash"?"#D29922":m==="pos"?"#58A6FF":"#3FB950"}`,fontSize:11,padding:"6px 12px"}}>
-            ✓ Betaald via {m.toUpperCase()}
-          </button>)}
+
+        {/* COD Rembours */}
+        {parseFloat(detail.cod_bedrag||0)>0&&<div style={{background:"#161B22",borderRadius:2,padding:12}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+            <div>
+              <div style={{fontSize:12,fontWeight:700,color:"#E6EDF3"}}>COD Rembours</div>
+              <div style={{fontSize:11,color:"#8B949E",marginTop:2}}>Chauffeur int bij/na levering</div>
+            </div>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:20,color:detail.cod_betaald?"#3FB950":"#D29922"}}>
+              SRD {parseFloat(detail.cod_bedrag).toFixed(2)}
+            </div>
+          </div>
+          {detail.cod_betaald
+            ?<div style={{background:"#112D24",border:"1px solid #3FB950",borderRadius:2,padding:"6px 10px",fontSize:11,color:"#3FB950",fontWeight:600}}>
+              ✓ COD ontvangen via {detail.cod_betaald_methode?.toUpperCase()} op {detail.cod_betaald_op?new Date(detail.cod_betaald_op).toLocaleString("nl-NL"):"—"}
+            </div>
+            :<div>
+              <div style={{fontSize:11,color:"#8B949E",marginBottom:6}}>Markeer COD als ontvangen:</div>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                {["cash","pos","giraal"].map(m=><button key={m} onClick={async()=>{
+                  const now=new Date().toISOString();
+                  const volledig=detail.levering_betaald;
+                  await db(`/zendingen?id=eq.${detail.id}`,{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({
+                    cod_betaald:true,cod_betaald_op:now,cod_betaald_methode:m,
+                    volledig_betaald:volledig,betaald_op:now
+                  })});
+                  onRefresh();setDetail(d=>({...d,cod_betaald:true,cod_betaald_methode:m,cod_betaald_op:now,volledig_betaald:volledig}));
+                }} style={{background:m==="cash"?"#2D1D00":m==="pos"?"#1A3A5C":"#112D24",color:m==="cash"?"#D29922":m==="pos"?"#58A6FF":"#3FB950",border:`1px solid ${m==="cash"?"#D29922":m==="pos"?"#58A6FF":"#3FB950"}`,borderRadius:2,padding:"5px 10px",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>
+                  ✓ {m.toUpperCase()}
+                </button>)}
+              </div>
+            </div>
+          }
         </div>}
-        {detail.volledig_betaald&&<div style={{background:"#112D24",border:"1px solid #3FB950",borderRadius:2,padding:"8px 12px",fontSize:12,color:"#3FB950",fontWeight:600}}>
-          ✓ Volledig betaald via {detail.betaalmethode?.toUpperCase()} op {detail.betaald_op?new Date(detail.betaald_op).toLocaleString("nl-NL"):"—"}
-        </div>}
+
+        {/* Totaal overzicht */}
+        <div style={{marginTop:10,paddingTop:10,borderTop:"1px solid #21262D",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div style={{fontSize:12,color:"#8B949E"}}>Totaal openstaand</div>
+          <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:22,color:detail.volledig_betaald?"#3FB950":"#f01e2c"}}>
+            SRD {Math.max(0,(parseFloat(detail.prijs_srd||0)+parseFloat(detail.cod_bedrag||0))-(detail.levering_betaald?parseFloat(detail.prijs_srd||0):0)-(detail.cod_betaald?parseFloat(detail.cod_bedrag||0):0)).toFixed(2)}
+          </div>
+        </div>
       </div>
 
       <div style={{display:"flex",justifyContent:"space-between",marginTop:14}}>
@@ -914,20 +959,49 @@ function Klanten({klanten,zendingen,onRefresh}){
               </div>
             </div>
           </div>
-          {isOpen&&<div style={{marginTop:14,paddingTop:14,borderTop:"1px solid #21262D",display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-            {[
-              ["Bedrijfsnaam",k.bedrijfsnaam],
-              ["Contactpersoon",k.contactpersoon||"—"],
-              ["Email",k.email||"—"],
-              ["Telefoon",k.telefoon||"—"],
-              ["Adres",k.adres||"—"],
-              ["Stad",k.stad||"—"],
-              ["Postcode",k.postcode||"—"],
-              ["Portaal pincode",k.pincode||"1234"],
-            ].map(([l,v])=><div key={l} style={{background:"#0D1117",borderRadius:2,padding:"7px 10px"}}>
-              <div style={{fontSize:10,color:"#8B949E",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>{l}</div>
-              <div style={{fontSize:13,color:l==="Portaal pincode"?"#D29922":"#E6EDF3",fontWeight:l==="Portaal pincode"?700:400}}>{v}</div>
-            </div>)}
+          {isOpen&&<div style={{marginTop:14,paddingTop:14,borderTop:"1px solid #21262D"}}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
+              {[
+                ["Bedrijfsnaam",k.bedrijfsnaam],
+                ["Contactpersoon",k.contactpersoon||"—"],
+                ["Email",k.email||"—"],
+                ["Telefoon",k.telefoon||"—"],
+                ["Adres",k.adres||"—"],
+                ["Stad",k.stad||"—"],
+                ["Postcode",k.postcode||"—"],
+                ["Portaal pincode",k.pincode||"1234"],
+              ].map(([l,v])=><div key={l} style={{background:"#0D1117",borderRadius:2,padding:"7px 10px"}}>
+                <div style={{fontSize:10,color:"#8B949E",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>{l}</div>
+                <div style={{fontSize:13,color:l==="Portaal pincode"?"#D29922":"#E6EDF3",fontWeight:l==="Portaal pincode"?700:400}}>{v}</div>
+              </div>)}
+            </div>
+            {(()=>{
+              const kz=zendingen.filter(z=>z.klant_id===k.id);
+              const open_levering=kz.filter(z=>!z.levering_betaald&&z.prijs_srd>0);
+              const open_cod=kz.filter(z=>!z.cod_betaald&&z.cod_bedrag>0);
+              const totaal_open_lev=open_levering.reduce((a,z)=>a+parseFloat(z.prijs_srd||0),0);
+              const totaal_open_cod=open_cod.reduce((a,z)=>a+parseFloat(z.cod_bedrag||0),0);
+              if(open_levering.length===0&&open_cod.length===0) return <div style={{background:"#112D24",border:"1px solid #3FB950",borderRadius:2,padding:"8px 12px",fontSize:12,color:"#3FB950",fontWeight:600}}>✓ Geen openstaande betalingen</div>;
+              return <div>
+                <div style={{fontSize:11,color:"#f01e2c",fontWeight:700,marginBottom:8}}>⚠ Openstaande betalingen</div>
+                {open_levering.length>0&&<div style={{marginBottom:8}}>
+                  <div style={{fontSize:11,color:"#8B949E",marginBottom:6,fontWeight:600}}>Leveringskosten ({open_levering.length} zendingen) — totaal SRD {totaal_open_lev.toFixed(2)}</div>
+                  {open_levering.slice(0,3).map(z=><div key={z.id} style={{display:"flex",justifyContent:"space-between",padding:"5px 8px",background:"#0D1117",borderRadius:2,marginBottom:4,fontSize:12}}>
+                    <span style={{color:"#f01e2c",fontFamily:"'Bebas Neue',sans-serif"}}>{z.zending_code}</span>
+                    <span style={{color:"#D29922",fontWeight:600}}>SRD {parseFloat(z.prijs_srd).toFixed(2)}</span>
+                  </div>)}
+                  {open_levering.length>3&&<div style={{fontSize:11,color:"#484F58",padding:"4px 8px"}}>...en nog {open_levering.length-3} meer</div>}
+                </div>}
+                {open_cod.length>0&&<div>
+                  <div style={{fontSize:11,color:"#8B949E",marginBottom:6,fontWeight:600}}>COD Rembours ({open_cod.length} zendingen) — totaal SRD {totaal_open_cod.toFixed(2)}</div>
+                  {open_cod.slice(0,3).map(z=><div key={z.id} style={{display:"flex",justifyContent:"space-between",padding:"5px 8px",background:"#0D1117",borderRadius:2,marginBottom:4,fontSize:12}}>
+                    <span style={{color:"#f01e2c",fontFamily:"'Bebas Neue',sans-serif"}}>{z.zending_code}</span>
+                    <span style={{color:"#D29922",fontWeight:600}}>SRD {parseFloat(z.cod_bedrag).toFixed(2)}</span>
+                  </div>)}
+                  {open_cod.length>3&&<div style={{fontSize:11,color:"#484F58",padding:"4px 8px"}}>...en nog {open_cod.length-3} meer</div>}
+                </div>}
+              </div>;
+            })()}
           </div>}
         </div>
       })}
