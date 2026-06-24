@@ -157,7 +157,27 @@ async function load(){
         <tr class="total-row"><td colspan="4" style="text-align:right;letter-spacing:1px">TE BETALEN TOTAAL</td><td style="text-align:right">SRD ${totaal}</td></tr>
       </tbody>
     </table>
-    <div class="betaal">⚠️ <strong>Betaaltermijn: 3 dagen</strong> — Uiterlijk vóór <strong>${betaaldatum}</strong> | Methode: <strong>${z.betaalmethode||"POS"}</strong></div>
+    ${(()=>{
+      const totaal_bedrag = (parseFloat(z.prijs_srd||0) + parseFloat(z.cod_bedrag||0)).toFixed(2);
+      const lev_betaald = z.levering_betaald ? parseFloat(z.prijs_srd||0) : 0;
+      const cod_betaald = z.cod_betaald ? parseFloat(z.cod_bedrag||0) : 0;
+      const totaal_betaald = (lev_betaald + cod_betaald).toFixed(2);
+      const openstaand = Math.max(0, parseFloat(totaal_bedrag) - parseFloat(totaal_betaald)).toFixed(2);
+      if(z.levering_betaald && (!z.cod_bedrag || z.cod_betaald)){
+        return `<div style="background:#e8f5e9;border-left:4px solid #2a7a2a;padding:10px 20px;font-size:12px;margin:12px 20px;color:#2a7a2a;font-weight:bold">
+          ✅ VOLLEDIG BETAALD — SRD ${totaal_betaald} ontvangen via ${(z.levering_betaald_methode||"—").toUpperCase()}
+          ${z.levering_betaald_op ? `op ${new Date(z.levering_betaald_op).toLocaleDateString("nl-NL")}` : ""}
+        </div>`;
+      }
+      let html = '<table style="width:calc(100%-40px);border-collapse:collapse;margin:12px 20px;font-size:12px">';
+      html += '<tr style="background:#f5f5f5"><th style="padding:7px 10px;text-align:left;border:1px solid #ddd">Omschrijving</th><th style="padding:7px 10px;text-align:right;border:1px solid #ddd">Bedrag</th><th style="padding:7px 10px;text-align:center;border:1px solid #ddd">Status</th></tr>';
+      if(z.prijs_srd>0) html += '<tr><td style="padding:7px 10px;border:1px solid #eee">Leveringskosten</td><td style="padding:7px 10px;text-align:right;border:1px solid #eee;font-weight:600">SRD ' + parseFloat(z.prijs_srd).toFixed(2) + '</td><td style="padding:7px 10px;text-align:center;border:1px solid #eee"><span style="background:' + (z.levering_betaald?"#e8f5e9;color:#2a7a2a":"#fff8dc;color:#856404") + ';padding:2px 8px;border-radius:10px;font-weight:700;font-size:11px">' + (z.levering_betaald?"✓ Betaald":"Openstaand") + '</span></td></tr>';
+      if(z.cod_bedrag>0) html += '<tr><td style="padding:7px 10px;border:1px solid #eee">COD Rembours</td><td style="padding:7px 10px;text-align:right;border:1px solid #eee;font-weight:600">SRD ' + parseFloat(z.cod_bedrag).toFixed(2) + '</td><td style="padding:7px 10px;text-align:center;border:1px solid #eee"><span style="background:' + (z.cod_betaald?"#e8f5e9;color:#2a7a2a":"#fff8dc;color:#856404") + ';padding:2px 8px;border-radius:10px;font-weight:700;font-size:11px">' + (z.cod_betaald?"✓ Ontvangen":"Openstaand") + '</span></td></tr>';
+      html += '<tr style="background:#111;color:#fff"><td style="padding:8px 10px;font-weight:700">Totaal openstaand</td><td colspan="2" style="padding:8px 10px;text-align:right;font-weight:700;font-size:14px;color:' + (parseFloat(openstaand)>0?"#f0a0a8":"#90ee90") + '">SRD ' + openstaand + '</td></tr>';
+      html += '</table>';
+      if(parseFloat(openstaand)>0) html += '<div class="betaal">⚠️ <strong>Betaaltermijn: 3 dagen</strong> — Uiterlijk vóór <strong>' + betaaldatum + '</strong> | Hakrinkbank SRD: 2000.300.31 · Finabank SRD: 1001966177</div>';
+      return html;
+    })()}
     <div class="footer">SOlogics Suriname · sologics.site · Marowijnestraat 84a Paramaribo<br>Hakrinkbank SRD: 2000.300.31 · Finabank SRD: 1001966177</div>
   </div>`;
 
