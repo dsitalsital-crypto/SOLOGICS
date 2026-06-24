@@ -1099,17 +1099,30 @@ function Rapportages({zendingen,chauffeurs}){
   const mislukt=filtered.filter(z=>z.status==="mislukt");
   const onderweg=filtered.filter(z=>z.status==="onderweg");
   const succes=filtered.length>0?Math.round((afgeleverd.length/filtered.length)*100):0;
+
+  // Financieel overzicht
+  const totaal_omzet=filtered.reduce((a,z)=>a+parseFloat(z.prijs_srd||0),0);
+  const totaal_ontvangen=filtered.filter(z=>z.volledig_betaald).reduce((a,z)=>a+parseFloat(z.betaald_bedrag||0),0);
+  const totaal_open=filtered.filter(z=>!z.volledig_betaald).reduce((a,z)=>a+parseFloat(z.prijs_srd||0),0);
   const cod_totaal=filtered.filter(z=>z.cod_bedrag>0).reduce((a,z)=>a+parseFloat(z.cod_bedrag||0),0);
-  const cod_ontvangen=filtered.filter(z=>z.cod_ontvangen).reduce((a,z)=>a+parseFloat(z.cod_bedrag||0),0);
+  const cod_ontvangen=filtered.filter(z=>z.volledig_betaald&&z.cod_bedrag>0).reduce((a,z)=>a+parseFloat(z.cod_bedrag||0),0);
   const cod_open=cod_totaal-cod_ontvangen;
+
+  // Betaalmethode breakdown
+  const per_methode={cash:0,pos:0,giraal:0};
+  filtered.filter(z=>z.volledig_betaald).forEach(z=>{
+    const m=z.betaalmethode||"onbekend";
+    if(per_methode[m]!==undefined) per_methode[m]+=parseFloat(z.betaald_bedrag||0);
+  });
 
   // Per chauffeur stats
   const chStats=chauffeurs.map(c=>{
     const cz=filtered.filter(z=>z.chauffeur_id===c.id);
     const ca=cz.filter(z=>z.status==="afgeleverd"||z.status==="voltooid");
     const cm=cz.filter(z=>z.status==="mislukt");
-    const ccod=cz.filter(z=>z.cod_ontvangen).reduce((a,z)=>a+parseFloat(z.cod_bedrag||0),0);
-    return {...c,totaal:cz.length,afgeleverd:ca.length,mislukt:cm.length,cod:ccod,succes:cz.length>0?Math.round((ca.length/cz.length)*100):0};
+    const cbetaald=cz.filter(z=>z.volledig_betaald).reduce((a,z)=>a+parseFloat(z.betaald_bedrag||0),0);
+    const comzet=cz.reduce((a,z)=>a+parseFloat(z.prijs_srd||0),0);
+    return {...c,totaal:cz.length,afgeleverd:ca.length,mislukt:cm.length,cod:cbetaald,omzet:comzet,succes:cz.length>0?Math.round((ca.length/cz.length)*100):0};
   }).filter(c=>c.totaal>0).sort((a,b)=>b.totaal-a.totaal);
 
   // Per district
@@ -1144,9 +1157,37 @@ function Rapportages({zendingen,chauffeurs}){
       </div>)}
     </div>
 
+    {/* Financieel overzicht */}
+    <div style={{background:"#161B22",border:"1px solid #21262D",borderRadius:2,padding:16}}>
+      <div style={{fontSize:13,fontWeight:600,marginBottom:12}}>💰 Financieel Overzicht</div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:12}}>
+        {[
+          {l:"Totaal omzet",v:`SRD ${totaal_omzet.toFixed(2)}`,c:"#E6EDF3"},
+          {l:"Ontvangen",v:`SRD ${totaal_ontvangen.toFixed(2)}`,c:"#3FB950"},
+          {l:"Openstaand",v:`SRD ${totaal_open.toFixed(2)}`,c:totaal_open>0?"#D29922":"#3FB950"},
+        ].map(s=><div key={s.l} style={{background:"#0D1117",borderRadius:2,padding:"10px 12px"}}>
+          <div style={{fontSize:10,color:"#8B949E",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.05em"}}>{s.l}</div>
+          <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:22,color:s.c,marginTop:4}}>{s.v}</div>
+        </div>)}
+      </div>
+      <div style={{borderTop:"1px solid #21262D",paddingTop:12}}>
+        <div style={{fontSize:12,color:"#8B949E",fontWeight:600,marginBottom:8}}>Per betaalmethode (ontvangen)</div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
+          {[
+            {l:"Cash",v:per_methode.cash,c:"#D29922"},
+            {l:"POS",v:per_methode.pos,c:"#58A6FF"},
+            {l:"Giraal",v:per_methode.giraal,c:"#BC8CFF"},
+          ].map(s=><div key={s.l} style={{background:"#0D1117",borderRadius:2,padding:"8px 10px"}}>
+            <div style={{fontSize:10,color:"#8B949E",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.05em"}}>{s.l}</div>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:18,color:s.c,marginTop:2}}>SRD {s.v.toFixed(2)}</div>
+          </div>)}
+        </div>
+      </div>
+    </div>
+
     {/* COD overzicht */}
     <div style={{background:"#161B22",border:"1px solid #21262D",borderRadius:2,padding:16}}>
-      <div style={{fontSize:13,fontWeight:600,marginBottom:12}}>💰 COD Rembours Overzicht</div>
+      <div style={{fontSize:13,fontWeight:600,marginBottom:12}}>📦 COD Rembours</div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
         {[
           {l:"Totaal COD",v:`SRD ${cod_totaal.toFixed(2)}`,c:"#E6EDF3"},
@@ -1167,7 +1208,7 @@ function Rapportages({zendingen,chauffeurs}){
         <table style={{width:"100%",borderCollapse:"collapse",fontSize:13,minWidth:400}}>
           <thead style={{background:"#0D1117"}}>
             <tr>
-              {["Chauffeur","Totaal","Afgelev.","Mislukt","Succes%","COD ontvangen"].map(h=>
+              {["Chauffeur","Totaal","Afgelev.","Mislukt","Succes%","Omzet","Betaald ontvangen"].map(h=>
                 <th key={h} style={{textAlign:"left",padding:"8px 12px",fontSize:10,fontWeight:700,color:"#8B949E",textTransform:"uppercase",letterSpacing:"0.06em",borderBottom:"1px solid #21262D",whiteSpace:"nowrap"}}>{h}</th>
               )}
             </tr>
@@ -1181,7 +1222,8 @@ function Rapportages({zendingen,chauffeurs}){
               <td style={{padding:"10px 12px"}}>
                 <span style={{background:c.succes>=80?"#112D24":c.succes>=60?"#2D1D00":"#2a0408",color:c.succes>=80?"#3FB950":c.succes>=60?"#D29922":"#f01e2c",padding:"2px 8px",borderRadius:2,fontSize:11,fontWeight:700}}>{c.succes}%</span>
               </td>
-              <td style={{padding:"10px 12px",color:"#D29922",fontWeight:600}}>SRD {c.cod.toFixed(2)}</td>
+              <td style={{padding:"10px 12px",color:"#E6EDF3",fontWeight:600}}>SRD {c.omzet.toFixed(2)}</td>
+              <td style={{padding:"10px 12px",color:"#3FB950",fontWeight:600}}>SRD {c.cod.toFixed(2)}</td>
             </tr>)}
           </tbody>
         </table>
