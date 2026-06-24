@@ -290,42 +290,72 @@ function Portaal({klant,onLogout}){
       </div>}
 
       {/* BETAALSTATUS TAB */}
-      {!loading&&tab==="betaalstatus"&&<div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
-          <div style={{background:"#fff",borderRadius:6,padding:"16px 20px",boxShadow:"0 1px 4px rgba(0,0,0,.06)",borderLeft:"4px solid #8B1020"}}>
-            <div style={{fontSize:11,color:"#888",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em"}}>Totaal gefactureerd</div>
-            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:32,color:"#111",marginTop:4}}>SRD {totaal_srd.toFixed(2)}</div>
-          </div>
-          <div style={{background:"#fff",borderRadius:6,padding:"16px 20px",boxShadow:"0 1px 4px rgba(0,0,0,.06)",borderLeft:"4px solid #e3b341"}}>
-            <div style={{fontSize:11,color:"#888",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em"}}>Ontvanger betaalt (open)</div>
-            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:32,color:onbetaald>0?"#856404":"#2a7a2a",marginTop:4}}>SRD {onbetaald.toFixed(2)}</div>
-          </div>
+      {!loading&&tab==="betaalstatus"&&<div style={{display:"flex",flexDirection:"column",gap:12}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+          {[
+            {l:"Totaal gefactureerd",v:`SRD ${totaal_srd.toFixed(2)}`,c:"#111",b:"#8B1020"},
+            {l:"Leveringskosten open",v:`SRD ${zendingen.filter(z=>!z.levering_betaald&&z.prijs_srd>0).reduce((a,z)=>a+parseFloat(z.prijs_srd||0),0).toFixed(2)}`,c:"#856404",b:"#e3b341"},
+            {l:"COD open",v:`SRD ${zendingen.filter(z=>!z.cod_betaald&&z.cod_bedrag>0).reduce((a,z)=>a+parseFloat(z.cod_bedrag||0),0).toFixed(2)}`,c:"#856404",b:"#e3b341"},
+          ].map(s=><div key={s.l} style={{background:"#fff",borderRadius:6,padding:"14px 16px",boxShadow:"0 1px 4px rgba(0,0,0,.06)",borderLeft:`4px solid ${s.b}`}}>
+            <div style={{fontSize:11,color:"#888",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em"}}>{s.l}</div>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:26,color:s.c,marginTop:2}}>{s.v}</div>
+          </div>)}
         </div>
 
-        <div style={{background:"#fff",borderRadius:6,boxShadow:"0 1px 4px rgba(0,0,0,.06)",overflow:"hidden"}}>
-          <div style={{padding:"12px 16px",borderBottom:"1px solid #eee",fontSize:13,fontWeight:600,color:"#111"}}>Betaaloverzicht per zending</div>
-          <div style={{overflowX:"auto"}}>
-            <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-              <thead style={{background:"#f9f9f9"}}>
-                <tr>
-                  {["Zending #","Ontvanger","Bedrag","Betaler","Methode","Status"].map(h=>
-                    <th key={h} style={{padding:"10px 14px",textAlign:"left",fontSize:11,fontWeight:700,color:"#888",textTransform:"uppercase",letterSpacing:"0.06em",borderBottom:"1px solid #eee"}}>{h}</th>
-                  )}
-                </tr>
-              </thead>
-              <tbody>
-                {zendingen.map(z=><tr key={z.id} style={{borderBottom:"1px solid #eee"}}>
-                  <td style={{padding:"12px 14px",fontWeight:600,color:"#8B1020"}}>{z.zending_code}</td>
-                  <td style={{padding:"12px 14px"}}>{z.ontvanger_naam||"—"}</td>
-                  <td style={{padding:"12px 14px",fontWeight:600}}>{z.prijs_srd?`SRD ${z.prijs_srd}`:"—"}</td>
-                  <td style={{padding:"12px 14px",textTransform:"capitalize",color:"#555"}}>{z.betaler||"afzender"}</td>
-                  <td style={{padding:"12px 14px",textTransform:"capitalize",color:"#555"}}>{z.betaalmethode||"—"}</td>
-                  <td style={{padding:"12px 14px"}}><Badge status={z.status}/></td>
-                </tr>)}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        {/* Openstaande leveringskosten */}
+        {zendingen.filter(z=>!z.levering_betaald&&z.prijs_srd>0).length>0&&<div style={{background:"#fff",borderRadius:6,boxShadow:"0 1px 4px rgba(0,0,0,.06)",overflow:"hidden"}}>
+          <div style={{padding:"12px 16px",borderBottom:"1px solid #eee",fontSize:13,fontWeight:600,color:"#111",background:"#fff8dc"}}>⚠️ Openstaande leveringskosten</div>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+            <thead style={{background:"#f9f9f9"}}>
+              <tr>{["Zending #","Adres","Bedrag","Methode","Status"].map(h=><th key={h} style={{padding:"8px 14px",textAlign:"left",fontSize:11,fontWeight:700,color:"#888",textTransform:"uppercase",borderBottom:"1px solid #eee"}}>{h}</th>)}</tr>
+            </thead>
+            <tbody>
+              {zendingen.filter(z=>!z.levering_betaald&&z.prijs_srd>0).map(z=><tr key={z.id} style={{borderBottom:"1px solid #eee"}}>
+                <td style={{padding:"10px 14px",fontWeight:600,color:"#8B1020"}}>{z.zending_code}</td>
+                <td style={{padding:"10px 14px",color:"#555",maxWidth:150,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{z.afleveradres||"—"}</td>
+                <td style={{padding:"10px 14px",fontWeight:700,color:"#856404"}}>SRD {parseFloat(z.prijs_srd).toFixed(2)}</td>
+                <td style={{padding:"10px 14px",color:"#555",textTransform:"capitalize"}}>{z.betaalmethode||"—"}</td>
+                <td style={{padding:"10px 14px"}}><Badge status={z.status}/></td>
+              </tr>)}
+            </tbody>
+          </table>
+        </div>}
+
+        {/* Openstaande COD */}
+        {zendingen.filter(z=>!z.cod_betaald&&z.cod_bedrag>0).length>0&&<div style={{background:"#fff",borderRadius:6,boxShadow:"0 1px 4px rgba(0,0,0,.06)",overflow:"hidden"}}>
+          <div style={{padding:"12px 16px",borderBottom:"1px solid #eee",fontSize:13,fontWeight:600,color:"#111",background:"#fff8dc"}}>⚠️ Openstaande COD Rembours</div>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+            <thead style={{background:"#f9f9f9"}}>
+              <tr>{["Zending #","Adres","COD bedrag","Status"].map(h=><th key={h} style={{padding:"8px 14px",textAlign:"left",fontSize:11,fontWeight:700,color:"#888",textTransform:"uppercase",borderBottom:"1px solid #eee"}}>{h}</th>)}</tr>
+            </thead>
+            <tbody>
+              {zendingen.filter(z=>!z.cod_betaald&&z.cod_bedrag>0).map(z=><tr key={z.id} style={{borderBottom:"1px solid #eee"}}>
+                <td style={{padding:"10px 14px",fontWeight:600,color:"#8B1020"}}>{z.zending_code}</td>
+                <td style={{padding:"10px 14px",color:"#555",maxWidth:150,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{z.afleveradres||"—"}</td>
+                <td style={{padding:"10px 14px",fontWeight:700,color:"#856404"}}>SRD {parseFloat(z.cod_bedrag).toFixed(2)}</td>
+                <td style={{padding:"10px 14px"}}><Badge status={z.status}/></td>
+              </tr>)}
+            </tbody>
+          </table>
+        </div>}
+
+        {/* Alle betaald */}
+        {zendingen.filter(z=>z.levering_betaald).length>0&&<div style={{background:"#fff",borderRadius:6,boxShadow:"0 1px 4px rgba(0,0,0,.06)",overflow:"hidden"}}>
+          <div style={{padding:"12px 16px",borderBottom:"1px solid #eee",fontSize:13,fontWeight:600,color:"#2a7a2a",background:"#e8f5e9"}}>✅ Betaalde zendingen</div>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+            <thead style={{background:"#f9f9f9"}}>
+              <tr>{["Zending #","Leveringsk.","COD","Betaalmethode"].map(h=><th key={h} style={{padding:"8px 14px",textAlign:"left",fontSize:11,fontWeight:700,color:"#888",textTransform:"uppercase",borderBottom:"1px solid #eee"}}>{h}</th>)}</tr>
+            </thead>
+            <tbody>
+              {zendingen.filter(z=>z.levering_betaald).map(z=><tr key={z.id} style={{borderBottom:"1px solid #eee"}}>
+                <td style={{padding:"10px 14px",fontWeight:600,color:"#8B1020"}}>{z.zending_code}</td>
+                <td style={{padding:"10px 14px",color:z.levering_betaald?"#2a7a2a":"#856404",fontWeight:600}}>{z.levering_betaald?"✓ Betaald":"Open"}</td>
+                <td style={{padding:"10px 14px",color:z.cod_betaald?"#2a7a2a":z.cod_bedrag>0?"#856404":"#888"}}>{z.cod_bedrag>0?(z.cod_betaald?"✓ Ontvangen":"Open"):"—"}</td>
+                <td style={{padding:"10px 14px",color:"#555",textTransform:"capitalize"}}>{z.levering_betaald_methode||"—"}</td>
+              </tr>)}
+            </tbody>
+          </table>
+        </div>}
       </div>}
     </div>
 
