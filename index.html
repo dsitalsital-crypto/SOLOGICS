@@ -788,7 +788,9 @@ function Chauffeurs({chauffeurs,zendingen,onRefresh}){
 // ── KLANTEN ───────────────────────────────────────────────────────────────────
 function Klanten({klanten,zendingen,onRefresh}){
   const [showNew,setShowNew]=React.useState(false);
-  const [form,setForm]=React.useState({bedrijfsnaam:"",contactpersoon:"",email:"",telefoon:"",adres:"",stad:"",postcode:""});
+  const [editKlant,setEditKlant]=React.useState(null);
+  const [detailKlant,setDetailKlant]=React.useState(null);
+  const [form,setForm]=React.useState({bedrijfsnaam:"",contactpersoon:"",email:"",telefoon:"",adres:"",stad:"",postcode:"",pincode:"1234"});
   const [saving,setSaving]=React.useState(false);
   const [err,setErr]=React.useState("");
   const [search,setSearch]=React.useState("");
@@ -800,7 +802,17 @@ function Klanten({klanten,zendingen,onRefresh}){
     setSaving(true);setErr("");
     try{
       await db("/klanten",{method:"POST",headers:{Prefer:"return=representation"},body:JSON.stringify(form)});
-      setShowNew(false);setForm({bedrijfsnaam:"",contactpersoon:"",email:"",telefoon:"",adres:"",stad:"",postcode:""});onRefresh();
+      setShowNew(false);setForm({bedrijfsnaam:"",contactpersoon:"",email:"",telefoon:"",adres:"",stad:"",postcode:"",pincode:"1234"});onRefresh();
+    }catch(e){setErr(e.message);}
+    setSaving(false);
+  }
+
+  async function update(){
+    if(!editKlant)return;
+    setSaving(true);setErr("");
+    try{
+      await db(`/klanten?id=eq.${editKlant.id}`,{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify(form)});
+      setEditKlant(null);onRefresh();
     }catch(e){setErr(e.message);}
     setSaving(false);
   }
@@ -809,6 +821,29 @@ function Klanten({klanten,zendingen,onRefresh}){
     if(!confirm("Klant verwijderen?"))return;
     await db(`/klanten?id=eq.${id}`,{method:"DELETE"});onRefresh();
   }
+
+  function openEdit(k){
+    setForm({bedrijfsnaam:k.bedrijfsnaam||"",contactpersoon:k.contactpersoon||"",email:k.email||"",telefoon:k.telefoon||"",adres:k.adres||"",stad:k.stad||"",postcode:k.postcode||"",pincode:k.pincode||"1234"});
+    setEditKlant(k);
+  }
+
+  const KlantForm=({onSave,onCancel,saveLabel})=><div>
+    <Fld l="Bedrijfsnaam *" ch={<input style={S.inp} value={form.bedrijfsnaam} onChange={e=>setForm(f=>({...f,bedrijfsnaam:e.target.value}))}/>}/>
+    <Fld l="Contactpersoon" ch={<input style={S.inp} value={form.contactpersoon} onChange={e=>setForm(f=>({...f,contactpersoon:e.target.value}))}/>}/>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+      <Fld l="Email" ch={<input style={S.inp} type="email" value={form.email} onChange={e=>setForm(f=>({...f,email:e.target.value}))}/>}/>
+      <Fld l="Telefoon" ch={<input style={S.inp} value={form.telefoon} onChange={e=>setForm(f=>({...f,telefoon:e.target.value}))}/>}/>
+      <Fld l="Stad" ch={<input style={S.inp} value={form.stad} onChange={e=>setForm(f=>({...f,stad:e.target.value}))}/>}/>
+      <Fld l="Postcode" ch={<input style={S.inp} value={form.postcode} onChange={e=>setForm(f=>({...f,postcode:e.target.value}))}/>}/>
+      <Fld l="Portaal pincode" ch={<input style={S.inp} value={form.pincode} onChange={e=>setForm(f=>({...f,pincode:e.target.value}))} placeholder="1234"/>}/>
+    </div>
+    <Fld l="Adres" ch={<input style={S.inp} value={form.adres} onChange={e=>setForm(f=>({...f,adres:e.target.value}))}/>}/>
+    {err&&<div style={{color:"#f01e2c",fontSize:12,marginBottom:10}}>{err}</div>}
+    <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+      <button style={S.btnGhost} onClick={onCancel}>Annuleren</button>
+      <button style={S.btn} onClick={onSave} disabled={saving}>{saving?"Opslaan...":saveLabel}</button>
+    </div>
+  </div>;
 
   return <div style={{display:"flex",flexDirection:"column",gap:14}}>
     <div className="page-head" style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
@@ -820,35 +855,51 @@ function Klanten({klanten,zendingen,onRefresh}){
       {filtered.length===0&&<div style={{...S.card,color:"#8B949E",textAlign:"center",padding:28,fontSize:13}}>Geen klanten gevonden</div>}
       {filtered.map(k=>{
         const cnt=zendingen.filter(z=>z.klant_id===k.id).length;
-        return <div key={k.id} style={{...S.card,display:"flex",alignItems:"center",gap:12}}>
-          <div style={{width:42,height:42,borderRadius:2,background:"#2a0408",color:"#f01e2c",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,flexShrink:0}}>{k.bedrijfsnaam.slice(0,2).toUpperCase()}</div>
-          <div style={{flex:1,minWidth:0}}>
-            <div style={{fontWeight:600,fontSize:14,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{k.bedrijfsnaam}</div>
-            <div style={{fontSize:12,color:"#8B949E",marginTop:2}}>{[k.contactpersoon,k.stad].filter(Boolean).join(" · ")}</div>
-            <div style={{fontSize:11,color:"#484F58"}}>{k.email||""}</div>
+        const isOpen=detailKlant===k.id;
+        return <div key={k.id} style={{...S.card,display:"flex",flexDirection:"column",gap:0}}>
+          <div style={{display:"flex",alignItems:"center",gap:12}}>
+            <div style={{width:42,height:42,borderRadius:2,background:"#2a0408",color:"#f01e2c",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,flexShrink:0}}>{k.bedrijfsnaam.slice(0,2).toUpperCase()}</div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontWeight:600,fontSize:14,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{k.bedrijfsnaam}</div>
+              <div style={{fontSize:12,color:"#8B949E",marginTop:2}}>{[k.contactpersoon,k.stad].filter(Boolean).join(" · ")}</div>
+              <div style={{fontSize:11,color:"#484F58"}}>{k.email||""}</div>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6,flexShrink:0}}>
+              <span style={{background:"#2a0408",color:"#f01e2c",padding:"2px 8px",borderRadius:2,fontSize:11,fontWeight:600}}>{cnt} zendingen</span>
+              <div style={{display:"flex",gap:6}}>
+                <button style={{...S.btnGhost,padding:"4px 8px",fontSize:11}} onClick={()=>setDetailKlant(isOpen?null:k.id)}>
+                  {isOpen?"Verbergen":"Toon gegevens"}
+                </button>
+                <button style={{...S.btnGhost,padding:"4px 8px",fontSize:11,color:"#58A6FF",borderColor:"#58A6FF"}} onClick={()=>openEdit(k)}>✏️ Bewerken</button>
+                <button style={{...S.btnGhost,padding:"4px 8px",fontSize:11}} onClick={()=>del(k.id)}>✕</button>
+              </div>
+            </div>
           </div>
-          <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6,flexShrink:0}}>
-            <span style={{background:"#2a0408",color:"#f01e2c",padding:"2px 8px",borderRadius:2,fontSize:11,fontWeight:600}}>{cnt} zendingen</span>
-            <button style={{...S.btnGhost,padding:"4px 8px",fontSize:11}} onClick={()=>del(k.id)}>✕</button>
-          </div>
+          {isOpen&&<div style={{marginTop:14,paddingTop:14,borderTop:"1px solid #21262D",display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+            {[
+              ["Bedrijfsnaam",k.bedrijfsnaam],
+              ["Contactpersoon",k.contactpersoon||"—"],
+              ["Email",k.email||"—"],
+              ["Telefoon",k.telefoon||"—"],
+              ["Adres",k.adres||"—"],
+              ["Stad",k.stad||"—"],
+              ["Postcode",k.postcode||"—"],
+              ["Portaal pincode",k.pincode||"1234"],
+            ].map(([l,v])=><div key={l} style={{background:"#0D1117",borderRadius:2,padding:"7px 10px"}}>
+              <div style={{fontSize:10,color:"#8B949E",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>{l}</div>
+              <div style={{fontSize:13,color:l==="Portaal pincode"?"#D29922":"#E6EDF3",fontWeight:l==="Portaal pincode"?700:400}}>{v}</div>
+            </div>)}
+          </div>}
         </div>
       })}
     </div>
+
     {showNew&&<Modal title="Nieuwe klant" onClose={()=>setShowNew(false)}>
-      <Fld l="Bedrijfsnaam *" ch={<input style={S.inp} value={form.bedrijfsnaam} onChange={e=>setForm(f=>({...f,bedrijfsnaam:e.target.value}))}/>}/>
-      <Fld l="Contactpersoon" ch={<input style={S.inp} value={form.contactpersoon} onChange={e=>setForm(f=>({...f,contactpersoon:e.target.value}))}/>}/>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-        <Fld l="Email" ch={<input style={S.inp} type="email" value={form.email} onChange={e=>setForm(f=>({...f,email:e.target.value}))}/>}/>
-        <Fld l="Telefoon" ch={<input style={S.inp} value={form.telefoon} onChange={e=>setForm(f=>({...f,telefoon:e.target.value}))}/>}/>
-        <Fld l="Stad" ch={<input style={S.inp} value={form.stad} onChange={e=>setForm(f=>({...f,stad:e.target.value}))}/>}/>
-        <Fld l="Postcode" ch={<input style={S.inp} value={form.postcode} onChange={e=>setForm(f=>({...f,postcode:e.target.value}))}/>}/>
-      </div>
-      <Fld l="Adres" ch={<input style={S.inp} value={form.adres} onChange={e=>setForm(f=>({...f,adres:e.target.value}))}/>}/>
-      {err&&<div style={{color:"#f01e2c",fontSize:12,marginBottom:10}}>{err}</div>}
-      <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
-        <button style={S.btnGhost} onClick={()=>setShowNew(false)}>Annuleren</button>
-        <button style={S.btn} onClick={save} disabled={saving}>{saving?"Opslaan...":"Aanmaken"}</button>
-      </div>
+      <KlantForm onSave={save} onCancel={()=>setShowNew(false)} saveLabel="Aanmaken"/>
+    </Modal>}
+
+    {editKlant&&<Modal title={`Bewerk — ${editKlant.bedrijfsnaam}`} onClose={()=>setEditKlant(null)}>
+      <KlantForm onSave={update} onCancel={()=>setEditKlant(null)} saveLabel="Opslaan"/>
     </Modal>}
   </div>
 }
