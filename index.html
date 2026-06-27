@@ -1215,24 +1215,56 @@ function AdminLogin({onLogin}){
 
   async function login(){
     if(!user||!pass){setErr("Vul alle velden in");return;}
-    // Probeer eerst hardcoded admin
+
+    // Hardcoded admin check
     if(user===ADMIN_USER&&pass===ADMIN_PASS){
       const g={naam:"Admin",gebruikersnaam:"admin",rol:"admin"};
       sessionStorage.setItem("sl_admin","1");
       sessionStorage.setItem("sl_gebruiker",JSON.stringify(g));
+      // Sla op voor offline gebruik
+      localStorage.setItem("sl_offline_creds",JSON.stringify({gebruikersnaam:"admin",wachtwoord:pass,gebruiker:g}));
       onLogin(g);return;
     }
-    // Dan database
+
+    // Probeer database
     try{
       const r=await db(`/gebruikers?gebruikersnaam=eq.${encodeURIComponent(user)}&wachtwoord=eq.${encodeURIComponent(pass)}&actief=eq.true&select=*`);
       if(r&&r.length>0){
         sessionStorage.setItem("sl_admin","1");
         sessionStorage.setItem("sl_gebruiker",JSON.stringify(r[0]));
+        // Sla op voor offline gebruik
+        localStorage.setItem("sl_offline_creds",JSON.stringify({gebruikersnaam:user,wachtwoord:pass,gebruiker:r[0]}));
         onLogin(r[0]);
       } else {
+        // Probeer offline cache als geen internet
+        if(!navigator.onLine){
+          const cached=localStorage.getItem("sl_offline_creds");
+          if(cached){
+            const c=JSON.parse(cached);
+            if(c.gebruikersnaam===user&&c.wachtwoord===pass){
+              sessionStorage.setItem("sl_admin","1");
+              sessionStorage.setItem("sl_gebruiker",JSON.stringify(c.gebruiker));
+              onLogin(c.gebruiker);return;
+            }
+          }
+        }
         setErr("Onjuiste gebruikersnaam of wachtwoord");
       }
-    }catch(e){setErr("Inloggen mislukt");}
+    }catch(e){
+      // Offline fallback
+      const cached=localStorage.getItem("sl_offline_creds");
+      if(cached){
+        try{
+          const c=JSON.parse(cached);
+          if(c.gebruikersnaam===user&&c.wachtwoord===pass){
+            sessionStorage.setItem("sl_admin","1");
+            sessionStorage.setItem("sl_gebruiker",JSON.stringify(c.gebruiker));
+            onLogin(c.gebruiker);return;
+          }
+        }catch(err){}
+      }
+      setErr("Inloggen mislukt — controleer uw internetverbinding");
+    }
   }
 
   return <div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24,background:"#0D1117"}}>
