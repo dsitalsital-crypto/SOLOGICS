@@ -127,7 +127,22 @@ function Login({onLogin}){
   const [show,setShow]=React.useState(false);
 
   React.useEffect(()=>{
-    db("/chauffeurs?select=*&actief=eq.true&order=naam.asc").then(r=>{setChauffeurs(r||[]);setLoading(false);}).catch(()=>setLoading(false));
+    db("/chauffeurs?select=*&actief=eq.true&order=naam.asc")
+      .then(r=>{
+        const lijst=r||[];
+        setChauffeurs(lijst);
+        // Sla op voor offline gebruik
+        if(lijst.length>0)localStorage.setItem("sl_chauffeurs_cache",JSON.stringify(lijst));
+        setLoading(false);
+      })
+      .catch(()=>{
+        // Laad uit cache als offline
+        try{
+          const cached=JSON.parse(localStorage.getItem("sl_chauffeurs_cache")||"[]");
+          setChauffeurs(cached);
+        }catch(e){}
+        setLoading(false);
+      });
   },[]);
 
   function login(){
@@ -137,6 +152,8 @@ function Login({onLogin}){
     if(!c){setErr("Chauffeur niet gevonden");return;}
     if(c.pincode!==pincode){setErr("Onjuiste pincode");return;}
     localStorage.setItem("sl_chauffeur",JSON.stringify(c));
+    // Sla lijst op voor offline gebruik
+    localStorage.setItem("sl_chauffeurs_cache",JSON.stringify(chauffeurs));
     onLogin(c);
   }
 
@@ -603,8 +620,17 @@ function App(){
     setLoading(true);
     try{
       const z=await db(`/zendingen?chauffeur_id=eq.${chauffeur.id}&select=*&order=aangemaakt_op.desc`);
-      setZendingen(z||[]);
-    }catch(e){}
+      const lijst=z||[];
+      setZendingen(lijst);
+      // Sla op voor offline gebruik
+      localStorage.setItem("sl_zendingen_cache_"+chauffeur.id,JSON.stringify(lijst));
+    }catch(e){
+      // Laad uit cache als offline
+      try{
+        const cached=JSON.parse(localStorage.getItem("sl_zendingen_cache_"+chauffeur.id)||"[]");
+        setZendingen(cached);
+      }catch(err){}
+    }
     setLoading(false);
   }
 
