@@ -424,24 +424,28 @@ function RitDetail({z,onClose,onRefresh,chauffeur}){
       const pos=await new Promise((res,rej)=>navigator.geolocation.getCurrentPosition(res,rej,{timeout:5000}));
       lat=pos.coords.latitude;lng=pos.coords.longitude;
     }catch(e){}
-    await db(`/zendingen?id=eq.${z.id}`,{method:"PATCH",headers:{Prefer:"return=representation"},body:JSON.stringify({status:flow.next})});
+    const result=await db(`/zendingen?id=eq.${z.id}`,{method:"PATCH",headers:{Prefer:"return=representation"},body:JSON.stringify({status:flow.next})});
     await db("/status_logs",{method:"POST",headers:{Prefer:"return=representation"},body:JSON.stringify({zending_id:z.id,status:flow.next,lat,lng})});
-    setLoading(false);onRefresh();onClose();
+    setLoading(false);
+    // Update lokaal zonder refresh zodat offline ook werkt
+    const updatedZ={...z,status:flow.next};
+    onClose(updatedZ);
   }
 
-  if(showPOD)return <PODScreen z={z} chauffeur={chauffeur} onClose={()=>setShowPOD(false)} onDone={()=>{if(z.cod_bedrag>0){setShowPOD(false);setShowCOD(true);}else{onRefresh();onClose();}}}/>
+  if(showPOD)return <PODScreen z={z} chauffeur={chauffeur} onClose={()=>setShowPOD(false)} onDone={()=>{if(z.cod_bedrag>0){setShowPOD(false);setShowCOD(true);}else{onClose({...z,status:"afgeleverd"});}}}/>
 
   async function markMislukt(){
     setLoading(true);
     await db(`/zendingen?id=eq.${z.id}`,{method:"PATCH",headers:{Prefer:"return=representation"},body:JSON.stringify({status:"mislukt"})});
     await db("/status_logs",{method:"POST",headers:{Prefer:"return=representation"},body:JSON.stringify({zending_id:z.id,status:"mislukt",notitie:reden})});
-    setLoading(false);onRefresh();onClose();
+    setLoading(false);
+    onClose({...z,status:"mislukt"});
   }
 
   async function confirmCOD(){
     await db(`/zendingen?id=eq.${z.id}`,{method:"PATCH",headers:{Prefer:"return=representation"},body:JSON.stringify({cod_ontvangen:true})});
     await db("/cod_transacties",{method:"POST",headers:{Prefer:"return=representation"},body:JSON.stringify({zending_id:z.id,chauffeur_id:chauffeur.id,bedrag:parseFloat(codBedrag)||z.cod_bedrag,ontvangen:true})});
-    setShowCOD(false);onRefresh();onClose();
+    setShowCOD(false);onClose({...z,status:"afgeleverd",cod_ontvangen:true});
   }
 
   const openMaps=()=>{
@@ -649,7 +653,23 @@ function App(){
   const tabData={vandaag,actief,voltooid,mislukt};
   const shown=tabData[tab]||[];
 
-  if(detail)return <RitDetail z={detail} onClose={()=>{setDetail(null);load();}} onRefresh={load} chauffeur={chauffeur}/>;
+  if(detail)return <RitDetail z={detail} onClose={(updatedZ)=>{
+    setDetail(null);
+    if(updatedZ){
+      // Update lokaal zonder network call
+      setZendingen(prev=>prev.map(z=>z.id===updatedZ.id?{...z,...updatedZ}:z));
+      // Update cache
+      try{
+        const cached=JSON.parse(localStorage.getItem("sl_zendingen_cache_"+chauffeur.id)||"[]");
+        const updated=cached.map(z=>z.id===updatedZ.id?{...z,...updatedZ}:z);
+        localStorage.setItem("sl_zendingen_cache_"+chauffeur.id,JSON.stringify(updated));
+      }catch(e){}
+    } else {
+      load();
+    }
+  }} onRefresh={()=>{
+    if(navigator.onLine)load();
+  }} chauffeur={chauffeur}/>;
 
   return <div style={{height:"100vh",display:"flex",flexDirection:"column",background:"#0D1117"}}>
 
