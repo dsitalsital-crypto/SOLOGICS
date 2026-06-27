@@ -50,6 +50,44 @@ function loadXLSX(){
 
 const SUPA_URL="https://bvnyzxusfiloaivvhlnn.supabase.co";
 const KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ2bnl6eHVzZmlsb2FpdnZobG5uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2NjAzMjcsImV4cCI6MjA5MzIzNjMyN30.uT4KjSUxK9rwINGRktVcUgu3vdwvuoQ3lEFfccfJTQY";
+
+// ── OFFLINE QUEUE ──────────────────────────────────────────────────────────────
+const QUEUE_KEY="sl_offline_queue";
+function getQueue(){try{return JSON.parse(localStorage.getItem(QUEUE_KEY)||"[]");}catch(e){return[];}}
+function saveQueue(q){localStorage.setItem(QUEUE_KEY,JSON.stringify(q));}
+function addToQueue(item){const q=getQueue();q.push({...item,id:Date.now()+Math.random(),ts:new Date().toISOString()});saveQueue(q);console.log("Offline: opgeslagen in queue",item.url);}
+
+async function syncOfflineQueue(){
+  const q=getQueue();
+  if(q.length===0)return 0;
+  let synced=0;
+  const remaining=[];
+  for(const item of q){
+    try{
+      const r=await fetch(item.url,{method:item.method,headers:item.headers,body:item.body||undefined});
+      if(r.ok||r.status===201||r.status===204){synced++;console.log("Sync OK:",item.url);}
+      else{remaining.push(item);}
+    }catch(e){remaining.push(item);}
+  }
+  saveQueue(remaining);
+  return synced;
+}
+
+function isOnline(){return navigator.onLine;}
+
+// Luister naar online event — sync automatisch
+window.addEventListener("online",async()=>{
+  const n=await syncOfflineQueue();
+  if(n>0)console.log(`✓ ${n} offline acties gesynchroniseerd`);
+});
+
+// Luister naar SW berichten
+if("serviceWorker" in navigator){
+  navigator.serviceWorker.addEventListener("message",(e)=>{
+    if(e.data.type==="QUEUE_ADD")addToQueue(e.data.item);
+    if(e.data.type==="SYNC_START")syncOfflineQueue();
+  });
+}
 const MAPS_KEY="AIzaSyAAljdqj-5DtidkaQG2pDgBnpHHGSB-QKU";
 const START_ADRES="Marowijnestraat 84a, Paramaribo, Suriname";
 const START_BEDRAG=65;
@@ -96,12 +134,23 @@ async function db(path,o={}){
   if(o.headers){
     Object.entries(o.headers).forEach(([k,v])=>reqHeaders.set(k,v));
   }
-  const r=await fetch(url,{...o,method,headers:reqHeaders});
-  if(!r.ok)throw new Error(await r.text());
-  if(r.status===204||r.status===201)return null;
-  const text=await r.text();
-  if(!text||text.trim()==="")return null;
-  return JSON.parse(text);
+  try{
+    const r=await fetch(url,{...o,method,headers:reqHeaders});
+    if(!r.ok)throw new Error(await r.text());
+    if(r.status===204||r.status===201)return null;
+    const text=await r.text();
+    if(!text||text.trim()==="")return null;
+    return JSON.parse(text);
+  }catch(e){
+    // Als offline en het is een mutatie — sla op in queue
+    if(!isOnline()&&method!=="GET"){
+      const headers={};
+      reqHeaders.forEach((v,k)=>headers[k]=v);
+      addToQueue({url,method,headers,body:o.body||null});
+      return {offline:true,queued:true};
+    }
+    throw e;
+  }
 }
 
 const fd=d=>d?new Date(d).toLocaleDateString("nl-NL",{day:"2-digit",month:"short",year:"numeric"}):"—";
@@ -1464,8 +1513,25 @@ function App(){
         <span style={{color:"#fff",background:"#1a1a1a",padding:"4px 10px",fontWeight:700,letterSpacing:"0.05em",border:"1px solid #333"}}>SO</span><span style={{color:"#fff",background:"#8B1020",padding:"4px 10px",border:"2px solid #6a0d18",fontWeight:700,letterSpacing:"0.15em"}}>LOGICS</span>
       </div>
       <div style={{display:"flex",alignItems:"center",gap:8}}>
-        <div style={{width:7,height:7,borderRadius:"50%",background:error?"#f01e2c":"#3FB950"}}/>
-        <span style={{fontSize:11,color:"#8B949E"}}>{error?"Offline":"Live"}</span>
+        {(()=>{
+          const [online,setOnline]=React.useState(navigator.onLine);
+          const [queueCount,setQueueCount]=React.useState(0);
+          React.useEffect(()=>{
+            const update=()=>{
+              setOnline(navigator.onLine);
+              try{const q=JSON.parse(localStorage.getItem("sl_offline_queue")||"[]");setQueueCount(q.length);}catch(e){}
+            };
+            window.addEventListener("online",update);
+            window.addEventListener("offline",update);
+            const t=setInterval(update,3000);
+            return()=>{window.removeEventListener("online",update);window.removeEventListener("offline",update);clearInterval(t);};
+          },[]);
+          return <div style={{display:"flex",alignItems:"center",gap:6}}>
+            <div style={{width:7,height:7,borderRadius:"50%",background:online?"#3FB950":"#f01e2c"}}/>
+            <span style={{fontSize:11,color:"#8B949E"}}>{online?"Live":"Offline"}</span>
+            {queueCount>0&&<span style={{background:"#D29922",color:"#000",fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:8}}>{queueCount} wachtend</span>}
+          </div>;
+        })()}
         <button onClick={load} style={{...S.btnGhost,padding:"5px 10px",fontSize:12}}>↺</button>
         <div style={{fontSize:11,color:"#8B949E",display:"flex",flexDirection:"column",alignItems:"flex-end"}}>
           <span style={{color:"#E6EDF3",fontWeight:600}}>{gebruiker?.naam||"Admin"}</span>
