@@ -59,8 +59,45 @@ async function syncOfflineQueue(){
 }
 
 window.addEventListener("online",async()=>{
+  let msgs=[];
+
+  // Sync offline acties (statuswijzigingen etc)
   const n=await syncOfflineQueue();
-  if(n>0)alert(`✓ ${n} offline acties gesynchroniseerd!`);
+  if(n>0)msgs.push(`${n} statuswijzigingen`);
+
+  // Sync offline PODs (foto + handtekening)
+  const pods=JSON.parse(localStorage.getItem("sl_offline_pods")||"[]");
+  if(pods.length>0){
+    const remaining=[];
+    for(const pod of pods){
+      try{
+        let foto_url=null;
+        // Upload foto als base64 beschikbaar
+        if(pod.foto_base64&&pod.foto_naam){
+          const blob=await fetch(pod.foto_base64).then(r=>r.blob());
+          const file=new File([blob],pod.foto_naam,{type:blob.type});
+          const path=pod.zending_id+"/"+Date.now()+"."+pod.foto_naam.split(".").pop();
+          const uploadRes=await fetch(SUPA_URL+"/storage/v1/object/POD-fotos/"+path,{
+            method:"POST",
+            headers:{apikey:KEY,Authorization:"Bearer "+KEY,"Content-Type":blob.type,"x-upsert":"true"},
+            body:file
+          });
+          if(uploadRes.ok)foto_url=SUPA_URL+"/storage/v1/object/public/POD-fotos/"+path;
+        }
+        // Sla POD op
+        const r=await fetch(SUPA_URL+"/rest/v1/pod",{
+          method:"POST",
+          headers:{apikey:KEY,Authorization:"Bearer "+KEY,"Content-Type":"application/json",Prefer:"return=representation"},
+          body:JSON.stringify({zending_id:pod.zending_id,ontvanger:pod.ontvanger,handtekening:pod.handtekening||null,foto_url,lat:pod.lat,lng:pod.lng})
+        });
+        if(r.ok||r.status===201)msgs.push("1 POD");
+        else remaining.push(pod);
+      }catch(e){remaining.push(pod);}
+    }
+    localStorage.setItem("sl_offline_pods",JSON.stringify(remaining));
+  }
+
+  if(msgs.length>0)alert("✓ Gesynchroniseerd: "+msgs.join(", ")+"!");
 });
 
 async function db(path,o={}){
@@ -313,13 +350,38 @@ function PODScreen({z,chauffeur,onDone,onClose}){
     if(!ontvanger){setErr("Vul de naam van de ontvanger in");return;}
     setSaving(true);setErr("");
     try{
-      let foto_url=null;
-      if(foto)foto_url=await uploadFoto(foto);
       let lat=null,lng=null;
       try{
         const pos=await new Promise((res,rej)=>navigator.geolocation.getCurrentPosition(res,rej,{timeout:5000}));
         lat=pos.coords.latitude;lng=pos.coords.longitude;
       }catch(e){}
+
+      if(!navigator.onLine){
+        // Offline — sla POD op lokaal, upload later
+        const podData={
+          zending_id:z.id,
+          ontvanger,
+          handtekening:handtekening||null,
+          foto_base64:fotoPreview||null, // base64 voor offline opslag
+          foto_naam:foto?.name||null,
+          lat,lng,
+          ts:new Date().toISOString()
+        };
+        const offlinePODs=JSON.parse(localStorage.getItem("sl_offline_pods")||"[]");
+        offlinePODs.push(podData);
+        localStorage.setItem("sl_offline_pods",JSON.stringify(offlinePODs));
+
+        // Update status lokaal
+        await db("/zendingen?id=eq."+z.id,{method:"PATCH",headers:{Prefer:"return=representation"},body:JSON.stringify({status:"afgeleverd"})});
+        await db("/status_logs",{method:"POST",headers:{Prefer:"return=representation"},body:JSON.stringify({zending_id:z.id,status:"afgeleverd",lat,lng})});
+        onDone();
+        setSaving(false);
+        return;
+      }
+
+      // Online — normaal uploaden
+      let foto_url=null;
+      if(foto)foto_url=await uploadFoto(foto);
       await db("/pod",{method:"POST",headers:{Prefer:"return=representation"},body:JSON.stringify({zending_id:z.id,ontvanger,handtekening:handtekening||null,foto_url,lat,lng})});
       await db("/zendingen?id=eq."+z.id,{method:"PATCH",headers:{Prefer:"return=representation"},body:JSON.stringify({status:"afgeleverd"})});
       await db("/status_logs",{method:"POST",headers:{Prefer:"return=representation"},body:JSON.stringify({zending_id:z.id,status:"afgeleverd",lat,lng})});
