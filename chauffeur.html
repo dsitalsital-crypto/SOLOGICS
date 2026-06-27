@@ -36,6 +36,33 @@ const SUPA_URL="https://bvnyzxusfiloaivvhlnn.supabase.co";
 const KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ2bnl6eHVzZmlsb2FpdnZobG5uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2NjAzMjcsImV4cCI6MjA5MzIzNjMyN30.uT4KjSUxK9rwINGRktVcUgu3vdwvuoQ3lEFfccfJTQY";
 const H={"Content-Type":"application/json",apikey:KEY,Authorization:`Bearer ${KEY}`};
 
+// ── OFFLINE QUEUE ──────────────────────────────────────────────────────────────
+const QUEUE_KEY="sl_chauffeur_offline_queue";
+function getQueue(){try{return JSON.parse(localStorage.getItem(QUEUE_KEY)||"[]");}catch(e){return[];}}
+function saveQueue(q){localStorage.setItem(QUEUE_KEY,JSON.stringify(q));}
+function addToQueue(item){const q=getQueue();q.push({...item,id:Date.now()+Math.random(),ts:new Date().toISOString()});saveQueue(q);}
+
+async function syncOfflineQueue(){
+  const q=getQueue();
+  if(q.length===0)return 0;
+  let synced=0;
+  const remaining=[];
+  for(const item of q){
+    try{
+      const r=await fetch(item.url,{method:item.method,headers:item.headers,body:item.body||undefined});
+      if(r.ok||r.status===201||r.status===204){synced++;}
+      else{remaining.push(item);}
+    }catch(e){remaining.push(item);}
+  }
+  saveQueue(remaining);
+  return synced;
+}
+
+window.addEventListener("online",async()=>{
+  const n=await syncOfflineQueue();
+  if(n>0)alert(`✓ ${n} offline acties gesynchroniseerd!`);
+});
+
 async function db(path,o={}){
   const sep=path.includes("?") ? "&" : "?";
   const url=SUPA_URL+"/rest/v1"+path+sep+"apikey="+KEY;
@@ -48,12 +75,22 @@ async function db(path,o={}){
     reqHeaders.set("Content-Type","application/json");
   }
   if(o.headers){Object.entries(o.headers).forEach(([k,v])=>reqHeaders.set(k,v));}
-  const r=await fetch(url,{...o,method,headers:reqHeaders});
-  if(!r.ok)throw new Error(await r.text());
-  if(r.status===204||r.status===201)return null;
-  const text=await r.text();
-  if(!text||text.trim()==="")return null;
-  return JSON.parse(text);
+  try{
+    const r=await fetch(url,{...o,method,headers:reqHeaders});
+    if(!r.ok)throw new Error(await r.text());
+    if(r.status===204||r.status===201)return null;
+    const text=await r.text();
+    if(!text||text.trim()==="")return null;
+    return JSON.parse(text);
+  }catch(e){
+    if(!navigator.onLine&&method!=="GET"){
+      const headers={};
+      reqHeaders.forEach((v,k)=>headers[k]=v);
+      addToQueue({url,method,headers,body:o.body||null});
+      return {offline:true,queued:true};
+    }
+    throw e;
+  }
 }
 
 const STATUS_FLOW={
@@ -600,6 +637,8 @@ function App(){
         <div style={{fontSize:11,color:"#8B949E",marginTop:2}}>{chauffeur.naam}</div>
       </div>
       <div style={{display:"flex",gap:8,alignItems:"center"}}>
+        {!navigator.onLine&&<span style={{background:"#f01e2c",color:"#fff",fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:4}}>OFFLINE</span>}
+        {(()=>{try{const q=JSON.parse(localStorage.getItem("sl_chauffeur_offline_queue")||"[]");return q.length>0?<span style={{background:"#D29922",color:"#000",fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:4}}>{q.length} wachtend</span>:null;}catch(e){return null;}})()}
         <button onClick={load} style={{background:"#21262D",border:"none",color:"#8B949E",width:34,height:34,borderRadius:2,fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>↺</button>
         <button onClick={logout} style={{background:"transparent",border:"1px solid #30363D",borderRadius:2,color:"#8B949E",padding:"6px 10px",fontSize:11,fontFamily:"'DM Sans',sans-serif"}}>Uitloggen</button>
       </div>
