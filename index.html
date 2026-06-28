@@ -1622,55 +1622,70 @@ function App(){
 
 // ── INTEGRATIES ───────────────────────────────────────────────────────────────
 function Integraties(){
-  const [qb,setQb]=React.useState(null);
+  const [ebStats,setEbStats]=React.useState(null);
   const [loading,setLoading]=React.useState(true);
 
   React.useEffect(()=>{load();},[]);
 
   async function load(){
     try{
-      const r=await db("/qb_connectie?select=*&limit=1");
-      setQb(r&&r[0]?r[0]:null);
+      const r=await db("/zendingen?select=eb_gesynchroniseerd&limit=1000");
+      if(r){
+        const gesync=r.filter(z=>z.eb_gesynchroniseerd).length;
+        const ongesync=r.filter(z=>!z.eb_gesynchroniseerd).length;
+        setEbStats({gesync,ongesync,totaal:r.length});
+      }
     }catch(e){}
     setLoading(false);
   }
 
-  function connectQB(){
-    const QB_CLIENT_ID="ABMRpAfiYYjz6kl5PbtEkDYxsClgxFpeQ7626cAPrvUZcbbkkC";
-    const REDIRECT="https://sologics.site/qb-callback.html";
-    const scope="com.intuit.quickbooks.accounting";
-    const state=Math.random().toString(36).slice(2);
-    const url=`https://appcenter.intuit.com/connect/oauth2?client_id=${QB_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT)}&response_type=code&scope=${encodeURIComponent(scope)}&state=${state}`;
-    window.location.href=url;
-  }
-
-  async function disconnectQB(){
-    if(!confirm("QuickBooks koppeling verbreken?"))return;
-    await db(`/qb_connectie?id=eq.${qb.id}`,{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({verbonden:false})});
-    load();
+  async function syncNu(){
+    if(!confirm("Alle niet-gesynchroniseerde zendingen nu synchroniseren?"))return;
+    try{
+      const r=await db("/zendingen?eb_gesynchroniseerd=eq.false&select=*&limit=100");
+      if(!r||r.length===0){alert("Alles is al gesynchroniseerd!");return;}
+      let ok=0;let fail=0;
+      for(const z of r){
+        try{
+          const res=await fetch(SUPA_URL+"/functions/v1/eb-sync",{
+            method:"POST",
+            headers:{apikey:KEY,Authorization:"Bearer "+KEY,"Content-Type":"application/json"},
+            body:JSON.stringify(z)
+          });
+          const data=await res.json();
+          if(data.ok)ok++;else fail++;
+        }catch(e){fail++;}
+      }
+      alert(`Klaar! ${ok} gesynchroniseerd, ${fail} mislukt.`);
+      load();
+    }catch(e){alert("Fout: "+e.message);}
   }
 
   return <div style={{display:"flex",flexDirection:"column",gap:14}}>
     <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:26,letterSpacing:1}}>Integraties</div>
 
-    <div style={{...S.card,display:"flex",alignItems:"center",gap:16}}>
-      <div style={{width:48,height:48,borderRadius:8,background:"#2CA01C",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0}}>📊</div>
-      <div style={{flex:1}}>
-        <div style={{fontWeight:700,fontSize:15}}>QuickBooks Online</div>
-        <div style={{fontSize:12,color:"#8B949E",marginTop:2}}>
-          {loading?"Laden...":qb?.verbonden?"✓ Gekoppeld — nieuwe zendingen worden automatisch gefactureerd":"Niet gekoppeld"}
+    {/* eBoekhouden */}
+    <div style={S.card}>
+      <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:14}}>
+        <div style={{width:48,height:48,borderRadius:8,background:"#1a3a5c",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0}}>📒</div>
+        <div style={{flex:1}}>
+          <div style={{fontWeight:700,fontSize:15}}>eBoekhouden</div>
+          <div style={{fontSize:12,color:"#3FB950",marginTop:2}}>✓ Actief — nieuwe zendingen worden automatisch gefactureerd</div>
         </div>
-        {qb?.verbonden&&qb?.bijgewerkt_op&&<div style={{fontSize:11,color:"#484F58",marginTop:2}}>Laatst bijgewerkt: {new Date(qb.bijgewerkt_op).toLocaleString("nl-NL")}</div>}
+        <button onClick={syncNu} style={{...S.btn,fontSize:11,padding:"6px 12px"}}>↺ Sync nu</button>
       </div>
-      {!loading&&(qb?.verbonden
-        ?<button onClick={disconnectQB} style={{...S.btnGhost,color:"#f01e2c",borderColor:"#f01e2c"}}>Loskoppelen</button>
-        :<button onClick={connectQB} style={S.btn}>Koppel QuickBooks</button>
-      )}
-    </div>
-
-    <div style={{...S.card,background:"#0D1117"}}>
-      <div style={{fontSize:12,color:"#8B949E",lineHeight:1.6}}>
-        Na koppeling wordt elke nieuwe zending automatisch als factuur aangemaakt in QuickBooks Online met: zendingcode, klantnaam, adres, te betalen bedrag en aantal pakketten.
+      {!loading&&ebStats&&<div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
+        {[
+          {l:"Totaal zendingen",v:ebStats.totaal,c:"#E6EDF3"},
+          {l:"Gesynchroniseerd",v:ebStats.gesync,c:"#3FB950"},
+          {l:"Niet gesync.",v:ebStats.ongesync,c:ebStats.ongesync>0?"#D29922":"#3FB950"},
+        ].map(s=><div key={s.l} style={{background:"#0D1117",borderRadius:2,padding:"8px 10px"}}>
+          <div style={{fontSize:10,color:"#8B949E",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em"}}>{s.l}</div>
+          <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:24,color:s.c,marginTop:2}}>{s.v}</div>
+        </div>)}
+      </div>}
+      <div style={{fontSize:11,color:"#484F58",marginTop:12,lineHeight:1.6}}>
+        Elke nieuwe zending wordt automatisch als verkoopfactuur aangemaakt in eBoekhouden (grootboek 8000). Klanten worden automatisch aangemaakt als debiteur.
       </div>
     </div>
   </div>
